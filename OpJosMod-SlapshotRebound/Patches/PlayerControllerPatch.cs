@@ -18,7 +18,7 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
         }
 
         private static bool alreadyPressed = false;
-        private static KeyCode key = KeyCode.P;
+        private static KeyCode key = KeyCode.C;
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -26,10 +26,16 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
         {
             if (Input.GetKeyInt(key) && alreadyPressed == false)
             {
-                mls.LogInfo("P pressed");
+                mls.LogInfo(key + " was pressed");
+                OnButtonClick(__instance);
             }
 
             alreadyPressed = Input.GetKeyInt(key);
+        }
+
+        private static void OnButtonClick(PlayerController __instnace) 
+        {
+            Puck puck = __instnace.GetNearestPuck();
         }
     }
 }
