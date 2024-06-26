@@ -1,4 +1,5 @@
 ﻿using AI;
+using AI.Strategy;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
@@ -6,6 +7,7 @@ using Michsky.UI.ModernUIPack;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine.Playables;
 
 namespace OpJosModSlapshotRebound.TestMod.Patches
 {
@@ -35,19 +37,19 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             alreadyPressed = Input.GetKeyInt(key);
         }
 
-        private static void OnButtonClick(PlayerController __instnace) 
+        private static void OnButtonClick(PlayerController __instnace) //ai doenst turn on in real matches, just bot ones?
         {
             if (isBot)
             {
                 isBot = false;
                 __instnace.DisableAI();
-                
             }
             else
             {
                 isBot = true;
                 __instnace.EnableAI();
                 __instnace.aiController.difficulty = AIController.DifficultyEnum.Hard;
+                __instnace.aiController.strategySelector = AIController.StrategyEnum.TeamplayStrategy;
             }
         }
     }
