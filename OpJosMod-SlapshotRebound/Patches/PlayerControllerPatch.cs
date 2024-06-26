@@ -1,4 +1,5 @@
-﻿using BepInEx.Logging;
+﻿using AI;
+using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
 using Michsky.UI.ModernUIPack;
@@ -19,6 +20,7 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
 
         private static bool alreadyPressed = false;
         private static KeyCode key = KeyCode.C;
+        private static bool isBot = false;
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -35,7 +37,18 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
 
         private static void OnButtonClick(PlayerController __instnace) 
         {
-            Puck puck = __instnace.GetNearestPuck();
+            if (isBot)
+            {
+                isBot = false;
+                __instnace.DisableAI();
+                
+            }
+            else
+            {
+                isBot = true;
+                __instnace.EnableAI();
+                __instnace.aiController.difficulty = AIController.DifficultyEnum.Hard;
+            }
         }
     }
 }
