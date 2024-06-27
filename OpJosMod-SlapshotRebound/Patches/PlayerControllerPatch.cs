@@ -7,7 +7,9 @@ using Michsky.UI.ModernUIPack;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 using UnityEngine.Playables;
+using KeyCode = BepInEx.Unity.IL2CPP.UnityEngine.KeyCode;
 
 namespace OpJosModSlapshotRebound.TestMod.Patches
 {
@@ -21,35 +23,48 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
         }
 
         private static bool alreadyPressed = false;
-        private static KeyCode key = KeyCode.C;
-        private static bool isBot = false;
+        private static KeyCode pressedKey = KeyCode.P;
+        private static KeyCode heldKey = KeyCode.C;
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
         private static void UpdatePatch(PlayerController __instance)
         {
-            if (Input.GetKeyInt(key) && alreadyPressed == false)
+            if (Input.GetKeyInt(pressedKey) && alreadyPressed == false)
             {
-                mls.LogInfo(key + " was pressed");
+                mls.LogInfo(pressedKey + " was pressed");
                 OnButtonClick(__instance);
             }
+            alreadyPressed = Input.GetKeyInt(pressedKey);
 
-            alreadyPressed = Input.GetKeyInt(key);
+            if (Input.GetKeyInt(heldKey))
+            {
+                OnButtonHold(__instance);
+            }
         }
 
-        private static void OnButtonClick(PlayerController __instnace) //ai doenst turn on in real matches, just bot ones?
+        private static void OnButtonClick(PlayerController __instance)
         {
-            if (isBot)
+            //
+        }
+
+        private static void OnButtonHold(PlayerController __instance)
+        {
+            Puck puck = __instance.GetNearestPuck();
+            if (puck != null)
             {
-                isBot = false;
-                __instnace.DisableAI();
+                Rigidbody rb = __instance.player.handsRigidbody;
+
+                Vector3 playerPosition = rb.position;
+                Vector3 puckPosition = puck.transform.position;
+                Vector3 direction = (puckPosition - playerPosition).normalized;
+
+                float speed = 15.0f;
+                rb.AddForce(direction * speed, ForceMode.VelocityChange);
             }
             else
             {
-                isBot = true;
-                __instnace.EnableAI();
-                __instnace.aiController.difficulty = AIController.DifficultyEnum.Hard;
-                __instnace.aiController.strategySelector = AIController.StrategyEnum.TeamplayStrategy;
+                mls.LogError("no puck found");
             }
         }
     }
