@@ -23,16 +23,19 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
         }
 
         private static bool alreadyPressed = false;
-        private static KeyCode pressedKey = KeyCode.P;
+        private static KeyCode pressedKey = KeyCode.R;
         private static KeyCode heldKey = KeyCode.C;
+        private static bool controlPuck = false;
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
         private static void UpdatePatch(PlayerController __instance)
         {
+            if (!__instance.player.local)
+                return;
+
             if (Input.GetKeyInt(pressedKey) && alreadyPressed == false)
             {
-                mls.LogInfo(pressedKey + " was pressed");
                 OnButtonClick(__instance);
             }
             alreadyPressed = Input.GetKeyInt(pressedKey);
@@ -41,11 +44,24 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             {
                 OnButtonHold(__instance);
             }
+
+            HandlePuckControls(__instance);
         }
 
         private static void OnButtonClick(PlayerController __instance)
         {
-            //
+            Puck puck = __instance.GetNearestPuck();
+            if (controlPuck)
+            {
+                mls.LogInfo("Stop controlling puck");
+                controlPuck = false;
+            }
+            else
+            {
+
+                mls.LogInfo("Start controlling puck");
+                controlPuck = true;
+            }
         }
 
         private static void OnButtonHold(PlayerController __instance)
@@ -54,9 +70,9 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             if (puck != null)
             {
                 Rigidbody rb = __instance.player.handsRigidbody;
-
                 Vector3 playerPosition = rb.position;
                 Vector3 puckPosition = puck.transform.position;
+
                 Vector3 direction = (puckPosition - playerPosition).normalized;
 
                 float speed = 15.0f;
@@ -66,6 +82,62 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             {
                 mls.LogError("no puck found");
             }
+        }
+
+        private static void HandlePuckControls(PlayerController __instance)
+        {
+            if (!controlPuck)
+                return;
+
+            //stop player movment
+
+            Puck puck = __instance.GetNearestPuck();
+            Rigidbody rb = puck.PuckRigidbody;
+            Vector3 puckPosition = rb.transform.position;
+
+            Vector3 direction = new Vector3(0, 0, 0);
+
+            if (__instance.player.IsCameraFlipped())
+            {
+                if (Input.GetKeyInt(KeyCode.W))
+                {
+                    direction = Vector3.forward;
+                }
+                if (Input.GetKeyInt(KeyCode.A))
+                {
+                    direction = Vector3.left;
+                }
+                if (Input.GetKeyInt(KeyCode.S))
+                {
+                    direction = Vector3.back;
+                }
+                if (Input.GetKeyInt(KeyCode.D))
+                {
+                    direction = Vector3.right;
+                }
+            }
+            else
+            {
+                if (Input.GetKeyInt(KeyCode.W))
+                {
+                    direction = Vector3.back;
+                }
+                if (Input.GetKeyInt(KeyCode.A))
+                {
+                    direction = Vector3.right;
+                }
+                if (Input.GetKeyInt(KeyCode.S))
+                {
+                    direction = Vector3.forward;
+                }
+                if (Input.GetKeyInt(KeyCode.D))
+                {
+                    direction = Vector3.left;
+                }
+            }
+
+            float speed = 0.5f;
+            rb.AddForce(direction * speed, ForceMode.VelocityChange);
         }
     }
 }
