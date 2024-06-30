@@ -1,14 +1,10 @@
-﻿using AI;
-using AI.Strategy;
-using BepInEx.Logging;
+﻿using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
-using Michsky.UI.ModernUIPack;
-using System;
-using System.Collections.Generic;
-using System.Reflection;
+using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.Playables;
+using WindowsInput;
+using WindowsInput.Native;
 using KeyCode = BepInEx.Unity.IL2CPP.UnityEngine.KeyCode;
 
 namespace OpJosModSlapshotRebound.TestMod.Patches
@@ -27,6 +23,14 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
         private static KeyCode heldKey = KeyCode.C;
         private static bool controlPuck = false;
 
+        private static InputSimulator inputSimulator = new InputSimulator();
+        private static bool keysReleased = true;
+        private static bool flipControls = false;
+        private static VirtualKeyCode forwardKey = VirtualKeyCode.VK_W;
+        private static VirtualKeyCode backwardKey = VirtualKeyCode.VK_S;
+        private static VirtualKeyCode leftKey = VirtualKeyCode.VK_A;
+        private static VirtualKeyCode rightKey = VirtualKeyCode.VK_D;
+
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
         private static void UpdatePatch(PlayerController __instance)
@@ -44,24 +48,18 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             {
                 OnButtonHold(__instance);
             }
-
-            HandlePuckControls(__instance);
+            else
+            {
+                releaseKeys();
+            }
         }
 
         private static void OnButtonClick(PlayerController __instance)
         {
-            Puck puck = __instance.GetNearestPuck();
-            if (controlPuck)
-            {
-                mls.LogInfo("Stop controlling puck");
-                controlPuck = false;
-            }
-            else
-            {
-
-                mls.LogInfo("Start controlling puck");
-                controlPuck = true;
-            }
+            if (flipControls)
+                flipControls = false;
+            else 
+                flipControls = true;
         }
 
         private static void OnButtonHold(PlayerController __instance)
@@ -72,11 +70,58 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
                 Rigidbody rb = __instance.player.handsRigidbody;
                 Vector3 playerPosition = rb.position;
                 Vector3 puckPosition = puck.transform.position;
-
                 Vector3 direction = (puckPosition - playerPosition).normalized;
 
-                float speed = 15.0f;
-                rb.AddForce(direction * speed, ForceMode.VelocityChange);
+                if (Vector3.Distance(playerPosition, puckPosition) > 1.7)
+                {
+                    float angle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+                    keysReleased = false;
+                    //mls.LogInfo(angle);
+
+                    if ((!flipControls && __instance.player.IsCameraFlipped()) || ((flipControls && !__instance.player.IsCameraFlipped())))
+                    {
+                        if (angle > -45 && angle <= 45)
+                        {
+                            rapidClickKey(forwardKey);
+                        }
+                        else if (angle > 45 && angle <= 135)
+                        {
+                            rapidClickKey(rightKey);
+                        }
+                        else if (angle > -135 && angle <= -45)
+                        {
+                            rapidClickKey(leftKey);
+                        }
+                        else
+                        {
+                            rapidClickKey(backwardKey);
+                        }
+                    }
+                    else
+                    {
+                        if (angle > -45 && angle <= 45)
+                        {
+                            rapidClickKey(backwardKey);
+                        }
+                        else if (angle > 45 && angle <= 135)
+                        {
+                            rapidClickKey(leftKey);
+                        }
+                        else if (angle > -135 && angle <= -45)
+                        {
+                            rapidClickKey(rightKey);
+                        }
+                        else
+                        {
+                            rapidClickKey(forwardKey);
+                        }
+                    }
+                }
+                else
+                {
+                    mls.LogMessage("keys Released");
+                    releaseKeys();
+                }
             }
             else
             {
@@ -84,60 +129,22 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             }
         }
 
-        private static void HandlePuckControls(PlayerController __instance)
+        private static void releaseKeys()
         {
-            if (!controlPuck)
+            if (keysReleased)
                 return;
 
-            //stop player movment
+            inputSimulator.Keyboard.KeyUp(forwardKey);
+            inputSimulator.Keyboard.KeyUp(backwardKey);
+            inputSimulator.Keyboard.KeyUp(leftKey);
+            inputSimulator.Keyboard.KeyUp(rightKey);
+            keysReleased = true;
+        }
 
-            Puck puck = __instance.GetNearestPuck();
-            Rigidbody rb = puck.PuckRigidbody;
-            Vector3 puckPosition = rb.transform.position;
-
-            Vector3 direction = new Vector3(0, 0, 0);
-
-            if (__instance.player.IsCameraFlipped())
-            {
-                if (Input.GetKeyInt(KeyCode.W))
-                {
-                    direction = Vector3.forward;
-                }
-                if (Input.GetKeyInt(KeyCode.A))
-                {
-                    direction = Vector3.left;
-                }
-                if (Input.GetKeyInt(KeyCode.S))
-                {
-                    direction = Vector3.back;
-                }
-                if (Input.GetKeyInt(KeyCode.D))
-                {
-                    direction = Vector3.right;
-                }
-            }
-            else
-            {
-                if (Input.GetKeyInt(KeyCode.W))
-                {
-                    direction = Vector3.back;
-                }
-                if (Input.GetKeyInt(KeyCode.A))
-                {
-                    direction = Vector3.right;
-                }
-                if (Input.GetKeyInt(KeyCode.S))
-                {
-                    direction = Vector3.forward;
-                }
-                if (Input.GetKeyInt(KeyCode.D))
-                {
-                    direction = Vector3.left;
-                }
-            }
-
-            float speed = 0.5f;
-            rb.AddForce(direction * speed, ForceMode.VelocityChange);
+        private static void rapidClickKey(VirtualKeyCode key)
+        {
+            inputSimulator.Keyboard.KeyDown(key);
+            inputSimulator.Keyboard.KeyUp(key);
         }
     }
 }
