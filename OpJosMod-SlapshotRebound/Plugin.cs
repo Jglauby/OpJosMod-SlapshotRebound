@@ -2,15 +2,15 @@
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
-using OpJosModSlapshotRebound.TestMod.Patches;
+using OpJosModSlapshotRebound.AIPlayer.Patches;
 
-namespace OpJosModSlapshotRebound.TestMod
+namespace OpJosModSlapshotRebound.AIPlayer
 {
     [BepInPlugin(modGUID, modName, modVersion)]
     public class OpJosModSlapshotRebound : BasePlugin
     {
-        private const string modGUID = "OpJosModSlapshotRebound.TestMod";
-        private const string modName = "TestMod";
+        private const string modGUID = "OpJosModSlapshotRebound.AIPlayer";
+        private const string modName = "AIPlayer";
         private const string modVersion = "1.0.0";
 
         private readonly Harmony harmony = new Harmony(modGUID);

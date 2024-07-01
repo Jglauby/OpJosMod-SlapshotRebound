@@ -2,18 +2,19 @@
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using UnityEngine;
 using WindowsInput;
 using WindowsInput.Native;
 using KeyCode = BepInEx.Unity.IL2CPP.UnityEngine.KeyCode;
 
-namespace OpJosModSlapshotRebound.TestMod.Patches
+namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
     [HarmonyPatch(typeof(PlayerController))]
     internal class PlayerControllerPatch
     {
-        private static ManualLogSource mls;
+        public static ManualLogSource mls;
         public static void SetLogSource(ManualLogSource source)
         {
             mls = source;
@@ -21,17 +22,15 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
 
         private static bool alreadyPressed = false;
         private static KeyCode pressedKey = KeyCode.R;
-        private static KeyCode heldKey = KeyCode.C;
-        private static bool controlPuck = false;
+
+        public static PlayerController localPlayer = null;
+        private static Game game = null;
 
         private static InputSimulator inputSimulator = new InputSimulator();
-        private static bool keysReleased = true;
-        private static bool flipControls = false;
         private static VirtualKeyCode forwardKey = VirtualKeyCode.VK_W;
         private static VirtualKeyCode backwardKey = VirtualKeyCode.VK_S;
         private static VirtualKeyCode leftKey = VirtualKeyCode.VK_A;
         private static VirtualKeyCode rightKey = VirtualKeyCode.VK_D;
-        private static List<Dictionary<VirtualKeyCode, float>> clickedKeysAt = new List<Dictionary<VirtualKeyCode, float>>();
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -40,178 +39,174 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
             if (!__instance.player.local)
                 return;
 
+            if (localPlayer == null)
+                localPlayer = __instance;
+
+            if (game == null)
+                game = AppManager.Instance.game;
+
             if (Input.GetKeyInt(pressedKey) && alreadyPressed == false)
             {
-                OnButtonClick(__instance);
+                OnButtonClick();
             }
             alreadyPressed = Input.GetKeyInt(pressedKey);
-
-            if (Input.GetKeyInt(heldKey))
-            {
-                OnButtonHold(__instance);
-            }
-            else
-            {
-                releaseKeys();
-            }
         }
 
-        private static void OnButtonClick(PlayerController __instance)
+        private static void OnButtonClick()
         {
-            if (flipControls)
-                flipControls = false;
-            else 
-                flipControls = true;
+            //toggle ai on and off here
+
+            //this is a 3v3 hockey game and the goal is to score more points than your enemy team
         }
 
-        private static void OnButtonHold(PlayerController __instance)
+        #region get information
+        private static Vector3 GetPuckLocation()
         {
-            Puck puck = __instance.GetNearestPuck();
-            if (puck != null)
+            return localPlayer.GetNearestPuck().transform.position;
+        }
+
+        private static Vector3 GetPlayerLocation()
+        {
+            return localPlayer.playerRigidbody.transform.position;
+        }
+
+        private static float GetDistanceFromPuck()
+        {
+            return Vector3.Distance(GetPlayerLocation(), GetPuckLocation());
+        }
+
+        public static Team GetPlayerTeam()
+        {
+
+            return localPlayer.player.team;
+        }
+
+        private static List<Vector3> GetTeamMatesLocation()
+        {
+            List<Vector3> result = null;
+            foreach (Player player in game.Players.values)
             {
-                Rigidbody rb = __instance.player.handsRigidbody;
-                Vector3 playerPosition = rb.position;
-                Vector3 puckPosition = puck.transform.position;
-                Vector3 direction = (puckPosition - playerPosition).normalized;
-
-                if (Vector3.Distance(playerPosition, puckPosition) > 1.6)
+                if (player.Team == GetPlayerTeam())
                 {
-                    float angle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
-                    keysReleased = false;
-                    //mls.LogInfo(angle);
-
-                    if ((!flipControls && __instance.player.IsCameraFlipped()) || ((flipControls && !__instance.player.IsCameraFlipped())))
-                    {
-                        if (angle > -22.5 && angle <= 22.5)
-                        {
-                            rapidClickKey(forwardKey);
-                        }
-                        else if (angle > 22.5 && angle <= 67.5)
-                        {
-                            rapidClickKey(forwardKey);
-                            rapidClickKey(rightKey);
-                        }
-                        else if (angle > 67.5 && angle <= 112.5)
-                        {
-                            rapidClickKey(rightKey);
-                        }
-                        else if (angle > 112.5 && angle <= 157.5)
-                        {
-                            rapidClickKey(rightKey);
-                            rapidClickKey(backwardKey);
-                        }
-                        else if (angle > 157.5 || angle <= -157.5)
-                        {
-                            rapidClickKey(backwardKey);
-                        }
-                        else if (angle > -157.5 && angle <= -112.5)
-                        {
-                            rapidClickKey(backwardKey);
-                            rapidClickKey(leftKey);
-                        }
-                        else if (angle > -112.5 && angle <= -67.5)
-                        {
-                            rapidClickKey(leftKey);
-                        }
-                        else if (angle > -67.5 && angle <= -22.5)
-                        {
-                            rapidClickKey(leftKey);
-                            rapidClickKey(forwardKey);
-                        }
-                    }
-                    else
-                    {
-                        if (angle > -22.5 && angle <= 22.5)
-                        {
-                            rapidClickKey(backwardKey);
-                        }
-                        else if (angle > 22.5 && angle <= 67.5)
-                        {
-                            rapidClickKey(leftKey);
-                            rapidClickKey(backwardKey);
-                        }
-                        else if (angle > 67.5 && angle <= 112.5)
-                        {
-                            rapidClickKey(leftKey);
-                        }
-                        else if (angle > 112.5 && angle <= 157.5)
-                        {
-                            rapidClickKey(leftKey);
-                            rapidClickKey(forwardKey);
-                        }
-                        else if (angle > 157.5 || angle <= -157.5)
-                        {
-                            rapidClickKey(forwardKey);
-                        }
-                        else if (angle > -157.5 && angle <= -112.5)
-                        {
-                            rapidClickKey(rightKey);
-                            rapidClickKey(forwardKey);
-                        }
-                        else if (angle > -112.5 && angle <= -67.5)
-                        {
-                            rapidClickKey(rightKey);
-                        }
-                        else if (angle > -67.5 && angle <= -22.5)
-                        {
-                            rapidClickKey(rightKey);
-                            rapidClickKey(backwardKey);
-                        }
-                    }
-                }
-                else
-                {
-                    mls.LogMessage("keys Released");
-                    releaseKeys();
+                    result.Add(player.playerController.playerRigidbody.transform.position);
                 }
             }
-            else
-            {
-                mls.LogError("no puck found");
-            }
+
+            return result;
         }
 
-        private static void releaseKeys()
+        private static List<Vector3> GetOpponentsLocation()
         {
-            if (keysReleased)
-                return;
+            List<Vector3> result = null;
+            foreach (Player player in game.Players.values)
+            {
+                if (player.Team != GetPlayerTeam())
+                {
+                    result.Add(player.playerController.playerRigidbody.transform.position);
+                }
+            }
+            
+            return result;
+        }
 
+        private static Vector3 GetTargetGoalLocation()
+        {
+            //-7 thorugh 7 x, for the width
+            //-57 or 57 for z depending on which goal
+
+            if (localPlayer.player.team == Team.Home)
+            {
+                return new Vector3(0, 0, -57);
+            }
+
+            else return new Vector3(0, 0, 57);
+        }
+
+        private static Vector3 GetDefendingGoalLocation()
+        {
+            if (localPlayer.player.team == Team.Home)
+            {
+                return new Vector3(0, 0, 57);
+            }
+
+            else return new Vector3(0, 0, -57);
+        }
+        #endregion
+
+        #region control player
+        private static void movement1()
+        {
+            inputSimulator.Keyboard.KeyDown(forwardKey);
             inputSimulator.Keyboard.KeyUp(forwardKey);
-            inputSimulator.Keyboard.KeyUp(backwardKey);
-            inputSimulator.Keyboard.KeyUp(leftKey);
-            inputSimulator.Keyboard.KeyUp(rightKey);
-            keysReleased = true;
         }
 
-        private static void rapidClickKey(VirtualKeyCode key)
+        private static void movement2()
         {
-            float timeBetween = 0f; // makes it go every time
-            float currentTime = Time.time;
-            Dictionary<VirtualKeyCode, float> currentDict = null;
-            foreach (var dict in clickedKeysAt)
+            inputSimulator.Keyboard.KeyDown(backwardKey);
+            inputSimulator.Keyboard.KeyUp(backwardKey);
+        }
+
+        private static void movement3()
+        {
+            inputSimulator.Keyboard.KeyDown(leftKey);
+            inputSimulator.Keyboard.KeyUp(leftKey);
+        }
+
+        private static void movement4()
+        {
+            inputSimulator.Keyboard.KeyDown(rightKey);
+            inputSimulator.Keyboard.KeyUp(rightKey);
+        }
+
+        private static void pickStickUp()
+        {
+            inputSimulator.Mouse.LeftButtonDown();
+        }
+
+        private static void putStickDown()
+        {
+            inputSimulator.Mouse.LeftButtonUp();
+        }
+
+        private static void spinClockwise()
+        {
+            int moveDistance = 100; 
+            inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
+        }
+
+        private static void spinCounterClockwise()
+        {
+            int moveDistance = -100;
+            inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
+        }
+        #endregion
+    }
+
+    #region extra feedback
+    //useful for teeling ai what is good/bad
+    [HarmonyPatch(typeof(Game))]
+    internal class GamePatch
+    {
+        [HarmonyPatch("OnGoalScored")]
+        [HarmonyPostfix]
+        private static void OnGoalScoredPatch(ref GoalScoredPacket goalScored)
+        {
+            if (goalScored.Team == PlayerControllerPatch.GetPlayerTeam())
             {
-                if (dict.ContainsKey(key))
+                PlayerControllerPatch.mls.LogInfo("team scored");
+                //goood!
+                if (goalScored.ScorerID == PlayerControllerPatch.localPlayer.player.Id)
                 {
-                    currentDict = dict;
-                    break;
+                    //extra good
+                    PlayerControllerPatch.mls.LogInfo("you scored!");
                 }
             }
-
-            if (currentDict == null)
+            else
             {
-                currentDict = new Dictionary<VirtualKeyCode, float> {{ key, 0 }};
-                clickedKeysAt.Add(currentDict);
+                //BAD
+                PlayerControllerPatch.mls.LogInfo("enemy scored!");
             }
-
-            //mls.LogInfo(currentTime + " | " + currentDict[key]);
-            if (currentTime - currentDict[key] >= timeBetween)
-            {
-                //mls.LogMessage("key pressed: " + key);
-                inputSimulator.Keyboard.KeyDown(key);
-                currentDict[key] = currentTime;
-            }
-
-            inputSimulator.Keyboard.KeyUp(key);
         }
     }
+    #endregion
 }
