@@ -1,6 +1,7 @@
 ﻿using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 using WindowsInput;
@@ -30,6 +31,7 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
         private static VirtualKeyCode backwardKey = VirtualKeyCode.VK_S;
         private static VirtualKeyCode leftKey = VirtualKeyCode.VK_A;
         private static VirtualKeyCode rightKey = VirtualKeyCode.VK_D;
+        private static List<Dictionary<VirtualKeyCode, float>> clickedKeysAt = new List<Dictionary<VirtualKeyCode, float>>();
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -72,7 +74,7 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
                 Vector3 puckPosition = puck.transform.position;
                 Vector3 direction = (puckPosition - playerPosition).normalized;
 
-                if (Vector3.Distance(playerPosition, puckPosition) > 1.7)
+                if (Vector3.Distance(playerPosition, puckPosition) > 1.6)
                 {
                     float angle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
                     keysReleased = false;
@@ -80,40 +82,80 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
 
                     if ((!flipControls && __instance.player.IsCameraFlipped()) || ((flipControls && !__instance.player.IsCameraFlipped())))
                     {
-                        if (angle > -45 && angle <= 45)
+                        if (angle > -22.5 && angle <= 22.5)
                         {
                             rapidClickKey(forwardKey);
                         }
-                        else if (angle > 45 && angle <= 135)
+                        else if (angle > 22.5 && angle <= 67.5)
+                        {
+                            rapidClickKey(forwardKey);
+                            rapidClickKey(rightKey);
+                        }
+                        else if (angle > 67.5 && angle <= 112.5)
                         {
                             rapidClickKey(rightKey);
                         }
-                        else if (angle > -135 && angle <= -45)
+                        else if (angle > 112.5 && angle <= 157.5)
+                        {
+                            rapidClickKey(rightKey);
+                            rapidClickKey(backwardKey);
+                        }
+                        else if (angle > 157.5 || angle <= -157.5)
+                        {
+                            rapidClickKey(backwardKey);
+                        }
+                        else if (angle > -157.5 && angle <= -112.5)
+                        {
+                            rapidClickKey(backwardKey);
+                            rapidClickKey(leftKey);
+                        }
+                        else if (angle > -112.5 && angle <= -67.5)
                         {
                             rapidClickKey(leftKey);
                         }
-                        else
+                        else if (angle > -67.5 && angle <= -22.5)
                         {
-                            rapidClickKey(backwardKey);
+                            rapidClickKey(leftKey);
+                            rapidClickKey(forwardKey);
                         }
                     }
                     else
                     {
-                        if (angle > -45 && angle <= 45)
+                        if (angle > -22.5 && angle <= 22.5)
                         {
                             rapidClickKey(backwardKey);
                         }
-                        else if (angle > 45 && angle <= 135)
+                        else if (angle > 22.5 && angle <= 67.5)
+                        {
+                            rapidClickKey(leftKey);
+                            rapidClickKey(backwardKey);
+                        }
+                        else if (angle > 67.5 && angle <= 112.5)
                         {
                             rapidClickKey(leftKey);
                         }
-                        else if (angle > -135 && angle <= -45)
+                        else if (angle > 112.5 && angle <= 157.5)
+                        {
+                            rapidClickKey(leftKey);
+                            rapidClickKey(forwardKey);
+                        }
+                        else if (angle > 157.5 || angle <= -157.5)
+                        {
+                            rapidClickKey(forwardKey);
+                        }
+                        else if (angle > -157.5 && angle <= -112.5)
+                        {
+                            rapidClickKey(rightKey);
+                            rapidClickKey(forwardKey);
+                        }
+                        else if (angle > -112.5 && angle <= -67.5)
                         {
                             rapidClickKey(rightKey);
                         }
-                        else
+                        else if (angle > -67.5 && angle <= -22.5)
                         {
-                            rapidClickKey(forwardKey);
+                            rapidClickKey(rightKey);
+                            rapidClickKey(backwardKey);
                         }
                     }
                 }
@@ -143,7 +185,32 @@ namespace OpJosModSlapshotRebound.TestMod.Patches
 
         private static void rapidClickKey(VirtualKeyCode key)
         {
-            inputSimulator.Keyboard.KeyDown(key);
+            float timeBetween = 0f; // makes it go every time
+            float currentTime = Time.time;
+            Dictionary<VirtualKeyCode, float> currentDict = null;
+            foreach (var dict in clickedKeysAt)
+            {
+                if (dict.ContainsKey(key))
+                {
+                    currentDict = dict;
+                    break;
+                }
+            }
+
+            if (currentDict == null)
+            {
+                currentDict = new Dictionary<VirtualKeyCode, float> {{ key, 0 }};
+                clickedKeysAt.Add(currentDict);
+            }
+
+            //mls.LogInfo(currentTime + " | " + currentDict[key]);
+            if (currentTime - currentDict[key] >= timeBetween)
+            {
+                //mls.LogMessage("key pressed: " + key);
+                inputSimulator.Keyboard.KeyDown(key);
+                currentDict[key] = currentTime;
+            }
+
             inputSimulator.Keyboard.KeyUp(key);
         }
     }
