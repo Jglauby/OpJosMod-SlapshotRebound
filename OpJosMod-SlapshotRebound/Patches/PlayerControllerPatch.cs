@@ -195,7 +195,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static string GetRandomAction()
         {
-            var actions = new List<string> { "move_towards_puck", "shoot_left", "shoot_right", "spin_clockwise", "spin_counterclockwise" };
+            var actions = new List<string> { "move_towards_puck", "lift_stick", "lower_stick", "spin_clockwise", "spin_counterclockwise" };
             return actions[random.Next(actions.Count)];
         }
 
