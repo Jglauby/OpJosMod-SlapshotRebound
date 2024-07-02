@@ -367,7 +367,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 50 / distanceToTargetGoal;
+                    float targetGoalReward = 25 / distanceToTargetGoal;
                     reward += targetGoalReward;
                 }
 
@@ -375,7 +375,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToDefendingGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 50 / distanceToDefendingGoal;
+                    float penalty = 25 / distanceToDefendingGoal;
                     reward -= penalty * 2;
                 }
             }
