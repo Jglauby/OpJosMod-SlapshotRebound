@@ -60,8 +60,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static Random random = new Random();
         private static float epsilon = 0.7f; // Start with a 10% chance of exploration
-        private static float epsilonDecay = 0.9999f; // Decay rate to reduce exploration over time
-        private static float minEpsilon = 0.1f; // Minimum exploration probability
+        private static float epsilonDecay = 0.995f; // Decay rate to reduce exploration over time
+        private static float minEpsilon = 0.05f; // Minimum exploration probability
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -196,12 +196,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     trainingData.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
                     currentSequence.Clear();
 
-                    if (trainingData.Count >= 10000) // Train in batches of 10,000
+                    if (trainingData.Count >= 20000) // Train in batches of 20,000
                     {
                         mls.LogWarning("saving data");
                         UpdateModel();
                         SaveTrainingData(dataPath, trainingData);
-                        trainingData.Clear();
+
+                        trainingData.RemoveRange(0, trainingData.Count / 2);
                     }
 
                     if (epsilon > minEpsilon)
@@ -409,6 +410,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void PropagateRewards(float finalReward)
         {
+            if (finalReward < 2)
+                return;
+
             float decayFactor = 0.99f; // Decay factor for propagating rewards
             float reward = finalReward;
 
@@ -513,7 +517,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         var line = reader.ReadLine();
                         var values = line.Split(',');
 
-                        if (values.Length != 11) // Ensure the line has the correct number of values
+                        if (values.Length != Constants.ExpectedFeatures) // Ensure the line has the correct number of values
                         {
                             continue;
                         }
