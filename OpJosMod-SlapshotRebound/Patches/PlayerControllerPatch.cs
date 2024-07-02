@@ -220,11 +220,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 case "move_towards_puck":
                     MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
                     break;
-                case "shoot_left":
-                    spinCounterClockwise();
+                case "lift_stick":
+                    pickStickUp();
                     break;
-                case "shoot_right":
-                    spinClockwise();
+                case "lower_stick":
+                    putStickDown();
                     break;
                 case "spin_clockwise":
                     spinClockwise();
