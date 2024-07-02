@@ -341,42 +341,51 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = nextReward;
 
-            //punish for puck moving away from target goal
-            float maxRewardDistance = 100.0f; // Adjusted to 100 units for normalization
-            float distanceToOwnGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-            float ownGoalPenalty = Mathf.Lerp(0.0f, 1.0f, Mathf.Clamp01(distanceToOwnGoal / maxRewardDistance));
-            reward -= ownGoalPenalty;
-
-            //reward puck going towards target goal
-            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 3)
+            //next to puck
+            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 2)
             {
-                float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                float targetGoalReward = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
-                reward += targetGoalReward;
+                //pushing towards target goal
+                if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
+                {
+                    float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
+                    float targetGoalReward = 10 / distanceToTargetGoal;
+                    reward += targetGoalReward;
+                }
+
+                //pushing towards own goal
+                if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
+                {
+                    float distanceToDefendingGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
+                    float penalty = 10 / distanceToDefendingGoal;
+                    reward -= penalty * 2;
+                }
             }
 
-            //punish for moving towards own goal
-            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 3)
-            {
-                float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                float penalty = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
-                reward -= penalty*2;
-            }
-
-            //reward for hitting puck towards target goal
+            //if hit puck away
             if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 2 &&
-                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 2 &&
-                (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))) 
+                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 2) 
             {
-                reward += 10f;
+                //now closer to target
+                if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
+                {
+                    float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
+                    float targetGoalReward = 10 / distanceToTargetGoal;
+                    reward += targetGoalReward;
+                }
+
+                //now closer to own goal
+                if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
+                {
+                    float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
+                    float penalty = 10 / distanceToTargetGoal;
+                    reward -= penalty * 2;
+                }
             }
 
-            //punish for hitting towards own goal
-            if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 2 &&
-                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 2 &&
-                (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation())))
+            //give points if teamate has puck
+            if (TeamateHasPuck())
             {
-                reward -= 20f;
+                reward += 5f;
             }
 
             // Encourage exploration with a small random factor
@@ -387,7 +396,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (reward > 0)
                 mls.LogWarning("Positive Feedback: " + reward);
             else
-                mls.LogError("Negative Feedback: " +  reward);
+                mls.LogError("Negative Feedback: " + reward);
 
             nextReward = 0;
             return reward;
@@ -624,6 +633,29 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static Quaternion GetStickRotation()
         {
             return localPlayer.handsRotatorRigidbody.rotation;
+        }
+
+        public static bool TeamateHasPuck()
+        {
+            //player too close
+            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 3)
+                return false;
+
+            //opponent too close
+            foreach (Vector3 playerLoc in GetOpponentsLocation())
+            {
+                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 3)
+                    return false;
+            }
+
+            //teamamte close
+            foreach (Vector3 playerLoc in GetTeamMatesLocation())
+            {
+                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 3)
+                    return true;
+            }
+
+            return false;
         }
         #endregion
 
