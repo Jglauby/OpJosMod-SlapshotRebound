@@ -203,7 +203,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                     if (trainingData.Count >= 20000) // Train in batches of 20,000
                     {
-                        mls.LogDebug("saving data!");
                         UpdateModel();
                         SaveTrainingData(dataPath, trainingData);
 
@@ -367,7 +366,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 25 / distanceToTargetGoal;
+                    float targetGoalReward = 50 / distanceToTargetGoal;
                     reward += targetGoalReward;
                 }
 
@@ -375,20 +374,20 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToDefendingGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 25 / distanceToDefendingGoal;
+                    float penalty = 50 / distanceToDefendingGoal;
                     reward -= penalty * 2;
                 }
             }
 
             //if hit puck away
-            if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 2 &&
-                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 2) 
+            if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 3 &&
+                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 3) 
             {
                 //now closer to target
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 25 / distanceToTargetGoal;
+                    float targetGoalReward = 50 / distanceToTargetGoal;
                     reward += targetGoalReward;
                 }
 
@@ -396,7 +395,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 25 / distanceToTargetGoal;
+                    float penalty = 50 / distanceToTargetGoal;
                     reward -= penalty * 2;
                 }
             }
