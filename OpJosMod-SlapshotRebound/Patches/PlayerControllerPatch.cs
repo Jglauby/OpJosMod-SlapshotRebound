@@ -140,7 +140,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
         }
 
-        private static async void RunAI()
+        private static void RunAI()
         {
             try
             {
@@ -157,7 +157,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 else
                 {
                     // Use the model to predict the action
-                    AIOutput prediction = await Task.Run(() => predictionEngine.Predict(input));
+                    AIOutput prediction = predictionEngine.Predict(input);
                     action = prediction?.Action ?? "invalid_action";
                 }
 
