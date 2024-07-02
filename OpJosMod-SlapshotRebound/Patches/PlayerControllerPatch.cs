@@ -358,7 +358,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static float GetReward()
         {
-            float reward = nextReward;
+            float reward = 0f;
 
             //next to puck
             if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 2)
@@ -406,6 +406,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 reward += 5f;
             }
+
+            reward += nextReward;
 
             // Encourage exploration with a small random factor
             reward += UnityEngine.Random.Range(-0.05f, 0.05f);
