@@ -164,7 +164,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                 if (action == "invalid_action" || string.IsNullOrEmpty(action))
                 {
-                    mls.LogWarning("AI did not provide a valid action. Defaulting to move_towards_puck.");
+                    //mls.LogWarning("AI did not provide a valid action. Defaulting to move_towards_puck.");
                     action = "move_towards_puck"; // Default action if invalid
                 }
 
@@ -193,7 +193,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
         }
 
-
         private static string GetRandomAction()
         {
             var actions = new List<string> { "move_towards_puck", "shoot_left", "shoot_right", "spin_clockwise", "spin_counterclockwise" };
@@ -215,6 +214,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void PerformAction(string action)
         {
+            //mls.LogInfo("performing action: " + action);
             switch (action)
             {
                 case "move_towards_puck":
@@ -233,7 +233,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     spinCounterClockwise();
                     break;
                 default:
-                    mls.LogError("" + $"Unknown action: {action}. Defaulting to move_towards_puck.");
+                    //mls.LogError("" + $"Unknown action: {action}. Defaulting to move_towards_puck.");
                     MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
                     break;
             }
@@ -259,7 +259,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
             nextReward = 0;
-            mls.LogInfo("" + $"gave reward: {reward}");
+            //mls.LogInfo("" + $"gave reward: {reward}");
             return reward;
         }
 
@@ -297,18 +297,17 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             try
             {
-                mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
-
+                //mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
                 using (var writer = new StreamWriter(path, false)) // False to overwrite the file
                 {
                     foreach (var item in data)
                     {
-                        mls.LogInfo("" + $"Writing data: {item.Features[0]},{item.Features[1]},{item.Reward}");
+                        //mls.LogInfo("" + $"Writing data: {item.Features[0]},{item.Features[1]},{item.Reward}");
                         writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
                     }
                 }
 
-                mls.LogInfo("Training data saved successfully.");
+                //mls.LogInfo("Training data saved successfully.");
             }
             catch (IOException ex)
             {
