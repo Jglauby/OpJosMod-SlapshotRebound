@@ -345,6 +345,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             // Encourage exploration with a small random factor
             reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
+            //look into retroactive reward giving
+            //like the trainingData, like maybe go back 100 records and add some sort of reward scalign down with how far back it is
+
             nextReward = 0;
             return reward;
         }
@@ -607,15 +610,15 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             if (goalScored.Team == PlayerControllerPatch.GetPlayerTeam())
             {
-                PlayerControllerPatch.nextReward = 250f;
+                PlayerControllerPatch.nextReward = 2500f;
                 if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
                 {
-                    PlayerControllerPatch.nextReward += 250f;
+                    PlayerControllerPatch.nextReward += 2500f;
                 }
             }
             else
             {
-                PlayerControllerPatch.nextReward = -500f;
+                PlayerControllerPatch.nextReward = -5000f;
             }
         }
     }
