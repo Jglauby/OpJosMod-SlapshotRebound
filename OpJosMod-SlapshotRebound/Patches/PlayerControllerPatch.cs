@@ -198,7 +198,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                     if (trainingData.Count >= 20000) // Train in batches of 20,000
                     {
-                        mls.LogWarning("saving data");
+                        mls.LogDebug("saving data!");
                         UpdateModel();
                         SaveTrainingData(dataPath, trainingData);
 
@@ -402,7 +402,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (reward > 0)
                 mls.LogWarning("Positive Feedback: " + reward);
             else
-                mls.LogError("Negative Feedback: " + reward);
+                mls.LogInfo("Negative Feedback: " + reward);
 
             nextReward = 0;
             return reward;
