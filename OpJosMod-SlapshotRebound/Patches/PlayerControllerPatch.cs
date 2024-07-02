@@ -7,6 +7,7 @@ using OpJosModSlapshotRebound.AIPlayer.Patches;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using WindowsInput;
@@ -109,6 +110,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             try
             {
                 mlContext = new MLContext();
+                var blankFeatures = new float[Constants.ExpectedFeatures];
+                blankFeatures[0] = 1.0f;
 
                 if (File.Exists(modelPath))
                 {
@@ -119,8 +122,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 {
                     var initialData = new List<AIInput>
                     {
-                        new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
-                        new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
+                        new AIInput { Features = blankFeatures, Reward = 0.5f },
+                        new AIInput { Features = blankFeatures, Reward = 0.2f },
                     };
                     var dataView = mlContext.Data.LoadFromEnumerable(initialData);
 
@@ -142,11 +145,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     {
                         new AISequence { Inputs = new List<AIInput>
                             {
-                                new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
-                                new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
+                                new AIInput { Features = blankFeatures, Reward = 0.5f },
+                                new AIInput { Features = blankFeatures, Reward = 0.2f },
                             }
                         }
                     };
+                    UpdateModel();
                     SaveTrainingData(dataPath, trainingData);
                 }
             }
