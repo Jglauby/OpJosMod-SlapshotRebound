@@ -48,6 +48,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static readonly string modelPath = Path.Combine(pluginDirectory, "MLModel.zip");
         private static readonly string dataPath = Path.Combine(pluginDirectory, "trainingData.csv");
 
+        private static Vector3 previousPuckPosition = Vector3.zero;
         public static float nextReward = 0f;
 
         private static Random random = new Random();
@@ -175,6 +176,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 PerformAction(action);
 
                 float reward = GetReward();
+                previousPuckPosition = GetPuckLocation();
                 input.Reward = reward;
 
                 if (reward != 0)
@@ -302,21 +304,43 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = nextReward;
 
-            //reward puck going towards target goal
-            float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-            float maxRewardDistance = 100.0f; // Adjusted to 100 units for normalization
-            float targetGoalReward = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
-            reward += targetGoalReward;
-
             //punish for puck moving away from target goal
-            if (targetGoalReward == 0)
+            float maxRewardDistance = 100.0f; // Adjusted to 100 units for normalization
+            float distanceToOwnGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
+            float ownGoalPenalty = Mathf.Lerp(0.0f, 1.0f, Mathf.Clamp01(distanceToOwnGoal / maxRewardDistance));
+            reward -= ownGoalPenalty;
+
+            //reward puck going towards target goal
+            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 3)
             {
-                float distanceToOwnGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                float ownGoalPenalty = Mathf.Lerp(0.0f, 1.0f, Mathf.Clamp01(distanceToOwnGoal / maxRewardDistance));
-                reward -= ownGoalPenalty;
+                float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
+                float targetGoalReward = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
+                reward += targetGoalReward;
             }
 
-            //
+            //punish for moving towards own goal
+            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 3)
+            {
+                float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
+                float penalty = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
+                reward -= penalty*2;
+            }
+
+            //reward for hitting puck towards target goal
+            if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 2 &&
+                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 2 &&
+                (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))) 
+            {
+                reward += 10f;
+            }
+
+            //punish for hitting towards own goal
+            if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 2 &&
+                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 2 &&
+                (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation())))
+            {
+                reward -= 20f;
+            }
 
             // Encourage exploration with a small random factor
             reward += UnityEngine.Random.Range(-0.05f, 0.05f);
