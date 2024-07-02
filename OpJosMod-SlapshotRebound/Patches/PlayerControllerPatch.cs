@@ -93,7 +93,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
         }
 
-        private static async Task InitializeML()
+        private static void InitializeML()
         {
             try
             {
@@ -132,7 +132,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
                         new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
                     };
-                    await SaveTrainingDataAsync(dataPath, trainingData);
+                    SaveTrainingData(dataPath, trainingData);
                 }
             }
             catch (Exception ex)
@@ -141,7 +141,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
         }
 
-        private static async Task RunAI()
+        private static void RunAI()
         {
             try
             {
@@ -176,7 +176,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (trainingData.Count >= 100) // Train in batches of 100
                 {
                     UpdateModel();
-                    await SaveTrainingDataAsync(dataPath, trainingData);
+                    SaveTrainingData(dataPath, trainingData);
                     trainingData.Clear();
                 }
 
@@ -193,6 +193,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
         }
 
+
         private static string GetRandomAction()
         {
             var actions = new List<string> { "move_towards_puck", "shoot_left", "shoot_right", "spin_clockwise", "spin_counterclockwise" };
@@ -204,38 +205,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             Vector3 puckLocation = GetPuckLocation();
             Vector3 playerLocation = GetPlayerLocation();
             Vector3 targetGoalLocation = GetTargetGoalLocation();
-            List<Vector3> teammates = GetTeamMatesLocation();
-            List<Vector3> opponents = GetOpponentsLocation();
 
             float distanceFromPuck = GetDistanceFromPuck();
             float isCloseToPuck = distanceFromPuck < 1.0f ? 1.0f : 0.0f;
             float isAlignedWithGoal = Math.Abs((targetGoalLocation - playerLocation).x) < 1.0f ? 1.0f : 0.0f;
 
-            // Normalize and add positions of teammates and opponents
-            float[] teammatesPositions = NormalizePlayerPositions(teammates, playerLocation, true);
-            float[] opponentsPositions = NormalizePlayerPositions(opponents, playerLocation, false);
-
-            // Combine all features into a single state array
-            float[] state = new float[2 + teammatesPositions.Length + opponentsPositions.Length];
-            state[0] = isCloseToPuck;
-            state[1] = isAlignedWithGoal;
-            Array.Copy(teammatesPositions, 0, state, 2, teammatesPositions.Length);
-            Array.Copy(opponentsPositions, 0, state, 2 + teammatesPositions.Length, opponentsPositions.Length);
-
-            return state;
-        }
-
-        private static float[] NormalizePlayerPositions(List<Vector3> players, Vector3 referencePoint, bool isTeammate)
-        {
-            float[] normalizedPositions = new float[players.Count * 3]; // x, z coordinates + team indicator
-            for (int i = 0; i < players.Count; i++)
-            {
-                Vector3 relativePosition = players[i] - referencePoint;
-                normalizedPositions[3 * i] = relativePosition.x;
-                normalizedPositions[3 * i + 1] = relativePosition.z;
-                normalizedPositions[3 * i + 2] = isTeammate ? 1.0f : 0.0f; // 1 for teammate, 0 for opponent
-            }
-            return normalizedPositions;
+            return new float[] { isCloseToPuck, isAlignedWithGoal };
         }
 
         private static void PerformAction(string action)
@@ -256,12 +231,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     break;
                 case "spin_counterclockwise":
                     spinCounterClockwise();
-                    break;
-                case "lift_stick":
-                    pickStickUp();
-                    break;
-                case "lower_stick":
-                    putStickDown();
                     break;
                 default:
                     mls.LogError("" + $"Unknown action: {action}. Defaulting to move_towards_puck.");
@@ -324,31 +293,29 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             };
         }
 
-        private static async Task SaveTrainingDataAsync(string path, List<AIInput> data)
+        private static void SaveTrainingData(string path, List<AIInput> data)
         {
-            await Task.Run(() =>
+            try
             {
-                try
-                {
-                    //mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
+                mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
 
-                    using (var writer = new StreamWriter(path, false)) // False to overwrite the file
+                using (var writer = new StreamWriter(path, false)) // False to overwrite the file
+                {
+                    foreach (var item in data)
                     {
-                        foreach (var item in data)
-                        {
-                            //mls.LogInfo("" + $"Writing data: {item.Features[0]},{item.Features[1]},{item.Reward}");
-                            writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
-                        }
+                        mls.LogInfo("" + $"Writing data: {item.Features[0]},{item.Features[1]},{item.Reward}");
+                        writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
                     }
+                }
 
-                    //mls.LogInfo("Training data saved successfully.");
-                }
-                catch (IOException ex)
-                {
-                    mls.LogError("" + $"Error saving training data: {ex.Message}");
-                }
-            });
+                mls.LogInfo("Training data saved successfully.");
+            }
+            catch (IOException ex)
+            {
+                mls.LogError("" + $"Error saving training data: {ex.Message}");
+            }
         }
+
 
         private static List<AIInput> LoadTrainingData(string path)
         {
@@ -422,34 +389,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
 
             return new Vector3(0, 0, -57);
-        }
-
-        private static List<Vector3> GetTeamMatesLocation()
-        {
-            List<Vector3> result = new List<Vector3>();
-            foreach (Player player in game.Players.Values)
-            {
-                if (player.Team == GetPlayerTeam())
-                {
-                    result.Add(player.playerController.playerRigidbody.transform.position);
-                }
-            }
-
-            return result;
-        }
-
-        private static List<Vector3> GetOpponentsLocation()
-        {
-            List<Vector3> result = new List<Vector3>();
-            foreach (Player player in game.Players.Values)
-            {
-                if (player.Team != GetPlayerTeam())
-                {
-                    result.Add(player.playerController.playerRigidbody.transform.position);
-                }
-            }
-
-            return result;
         }
         #endregion
 
