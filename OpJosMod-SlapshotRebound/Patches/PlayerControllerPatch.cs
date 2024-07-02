@@ -99,6 +99,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 InitializeML();
             }
+            else
+            {
+                UpdateModel();
+                SaveTrainingData(dataPath, trainingData);
+            }
         }
 
         private static void InitializeML()
