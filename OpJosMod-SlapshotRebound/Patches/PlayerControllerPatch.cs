@@ -52,9 +52,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.1f; // Start with a 10% chance of exploration
-        private static float epsilonDecay = 0.995f; // Decay rate to reduce exploration over time
-        private static float minEpsilon = 0.01f; // Minimum exploration probability
+        private static float epsilon = 0.9f; // Start with a 10% chance of exploration
+        private static float epsilonDecay = 0.99999f; // Decay rate to reduce exploration over time
+        private static float minEpsilon = 0.3f; // Minimum exploration probability
 
 
         [HarmonyPatch("Update")]
