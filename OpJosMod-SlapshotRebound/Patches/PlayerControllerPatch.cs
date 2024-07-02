@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using UnityEngine;
 using WindowsInput;
 using WindowsInput.Native;
@@ -86,11 +87,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (aiEnabled)
             {
                 RunAI();
-            }
-
-            if (Input.GetKeyInt(KeyCode.C))
-            {
-                mls.LogInfo(GetStickRotation().eulerAngles / 360.0f);
             }
         }
 
@@ -239,7 +235,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 "lift_stick", 
                 "lower_stick", 
                 "spin_clockwise", 
-                "spin_counterclockwise" 
+                "spin_counterclockwise",
+                "spin_clockwisefast",
+                "spin_counterclockwisefast"
             };
             return actions[random.Next(actions.Count)];
         }
@@ -339,6 +337,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     break;
                 case "spin_counterclockwise":
                     spinCounterClockwise();
+                    break;
+                case "spin_clockwisefast":
+                    spinClockwiseFast();
+                    break;
+                case "spin_counterclockwisefast":
+                    spinCounterClockwiseFast();
                     break;
                 default:
                     //mls.LogError("" + $"Unknown action: {action}. Defaulting to move_towards_puck.");
@@ -744,6 +748,32 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             int moveDistance = -100;
             inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
+        }
+
+        private static void spinClockwiseFast()
+        {
+            Task.Run(() =>
+            {
+                int moveDistance = 500;
+                for (int i = 0; i < 1000; i++)
+                {
+                    Task.Delay(1);
+                    inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
+                }
+            });
+        }
+
+        private static void spinCounterClockwiseFast()
+        {
+            Task.Run(() =>
+            {
+                int moveDistance = -500;
+                for (int i = 0; i < 1000; i++)
+                {
+                    Task.Delay(1);
+                    inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
+                }
+            });
         }
         #endregion
     }
