@@ -51,10 +51,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         public static float nextReward = 0f;
 
-        private static readonly object fileLock = new object();
-
-        private static bool explorationPhase = true;
         private static Random random = new Random();
+        private static float epsilon = 0.1f; // Start with a 10% chance of exploration
+        private static float epsilonDecay = 0.995f; // Decay rate to reduce exploration over time
+        private static float minEpsilon = 0.01f; // Minimum exploration probability
+
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -149,14 +150,14 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                 string action;
 
-                if (explorationPhase)
+                if (random.NextDouble() < epsilon)
                 {
-                    // Take a random action during the exploration phase
+                    // Exploration: take a random action
                     action = GetRandomAction();
                 }
                 else
                 {
-                    // Use the model to predict the action
+                    // Exploitation: use the model to predict the best action
                     AIOutput prediction = predictionEngine.Predict(input);
                     action = prediction?.Action ?? "invalid_action";
                 }
@@ -176,16 +177,22 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 {
                     UpdateModel();
                     SaveTrainingData(dataPath, trainingData);
-                    explorationPhase = false; // Exit exploration phase after enough data is collected
+                    trainingData.Clear();
                 }
 
-                mls.LogInfo("" + $"state: {string.Join(",", state)} action: {action} reward: {reward}");
+                if (epsilon > minEpsilon)
+                {
+                    epsilon *= epsilonDecay;
+                }
+
+                mls.LogInfo("" + $"state: {string.Join(",", state)} action: {action} reward: {reward} epsilon: {epsilon}");
             }
             catch (Exception ex)
             {
                 mls.LogError("" + $"Error running AI: {ex.Message}");
             }
         }
+
 
         private static string GetRandomAction()
         {
@@ -260,22 +267,16 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             try
             {
-                lock (fileLock)
-                {
-                    var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
-                    var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
-                        .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
-                        .Append(mlContext.Regression.Trainers.Sdca());
+                var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
+                var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
+                    .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                    .Append(mlContext.Regression.Trainers.Sdca());
 
-                    trainedModel = pipeline.Fit(dataView);
-                    predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
+                trainedModel = pipeline.Fit(dataView);
+                predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
 
-                    // Save the model
-                    mlContext.Model.Save(trainedModel, dataView.Schema, modelPath);
-
-                    // Clear training data after training
-                    trainingData.Clear();
-                }
+                // Save the model
+                mlContext.Model.Save(trainedModel, dataView.Schema, modelPath);
             }
             catch (Exception ex)
             {
@@ -296,16 +297,18 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             try
             {
-                lock (fileLock)
+                mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
+
+                using (var writer = new StreamWriter(path, false)) // False to overwrite the file
                 {
-                    using (var writer = new StreamWriter(path, false)) // False to overwrite the file
+                    foreach (var item in data)
                     {
-                        foreach (var item in data)
-                        {
-                            writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
-                        }
+                        mls.LogInfo("" + $"Writing data: {item.Features[0]},{item.Features[1]},{item.Reward}");
+                        writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
                     }
                 }
+
+                mls.LogInfo("Training data saved successfully.");
             }
             catch (IOException ex)
             {
@@ -313,32 +316,30 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
         }
 
+
         private static List<AIInput> LoadTrainingData(string path)
         {
             var data = new List<AIInput>();
             try
             {
-                lock (fileLock)
+                using (var reader = new StreamReader(path))
                 {
-                    using (var reader = new StreamReader(path))
+                    while (!reader.EndOfStream)
                     {
-                        while (!reader.EndOfStream)
+                        var line = reader.ReadLine();
+                        var values = line.Split(',');
+
+                        if (values.Length != 3) // Ensure the line has the correct number of values
                         {
-                            var line = reader.ReadLine();
-                            var values = line.Split(',');
-
-                            if (values.Length != 3) // Ensure the line has the correct number of values
-                            {
-                                continue;
-                            }
-
-                            var features = new float[2];
-                            features[0] = float.Parse(values[0]);
-                            features[1] = float.Parse(values[1]);
-                            var reward = float.Parse(values[2]);
-
-                            data.Add(new AIInput { Features = features, Reward = reward });
+                            continue;
                         }
+
+                        var features = new float[2];
+                        features[0] = float.Parse(values[0]);
+                        features[1] = float.Parse(values[1]);
+                        var reward = float.Parse(values[2]);
+
+                        data.Add(new AIInput { Features = features, Reward = reward });
                     }
                 }
             }
