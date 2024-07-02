@@ -164,7 +164,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                 if (action == "invalid_action" || string.IsNullOrEmpty(action))
                 {
-                    mls.LogError("AI did not provide a valid action. Defaulting to move_towards_puck.");
+                    mls.LogWarning("AI did not provide a valid action. Defaulting to move_towards_puck.");
                     action = "move_towards_puck"; // Default action if invalid
                 }
 
