@@ -7,8 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading.Tasks;
-using System.Threading;
 using UnityEngine;
 using WindowsInput;
 using WindowsInput.Native;
@@ -43,7 +41,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static MLContext mlContext;
         private static PredictionEngine<AIInput, AIOutput> predictionEngine;
         private static ITransformer trainedModel;
-        private static List<AIInput> trainingData = new List<AIInput>();
+        private static List<AISequence> trainingData = new List<AISequence>();
+        private static List<AIInput> currentSequence = new List<AIInput>();
 
         private static readonly string pluginDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         private static readonly string modelPath = Path.Combine(pluginDirectory, "MLModel.zip");
@@ -52,10 +51,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.9f; // Start with a 10% chance of exploration
-        private static float epsilonDecay = 0.99999f; // Decay rate to reduce exploration over time
-        private static float minEpsilon = 0.3f; // Minimum exploration probability
-
+        private static float epsilon = 0.7f; // Start with a 10% chance of exploration
+        private static float epsilonDecay = 0.999f; // Decay rate to reduce exploration over time
+        private static float minEpsilon = 0.1f; // Minimum exploration probability
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -127,17 +125,21 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 }
                 else
                 {
-                    trainingData = new List<AIInput>
+                    trainingData = new List<AISequence>
                     {
-                        new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
-                        new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
+                        new AISequence { Inputs = new List<AIInput>
+                            {
+                                new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
+                                new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
+                            }
+                        }
                     };
                     SaveTrainingData(dataPath, trainingData);
                 }
             }
             catch (Exception ex)
             {
-                mls.LogError("" + $"Error initializing ML: {ex.Message}");
+                mls.LogError("Error initializing ML: " + ex.Message);
             }
         }
 
@@ -147,6 +149,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 float[] state = GetCurrentState();
                 AIInput input = new AIInput { Features = state, Reward = nextReward };
+
+                currentSequence.Add(input);
 
                 string action;
 
@@ -171,25 +175,32 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 PerformAction(action);
 
                 float reward = GetReward();
-                trainingData.Add(new AIInput { Features = state, Reward = reward });
+                input.Reward = reward;
 
-                if (trainingData.Count >= 100) // Train in batches of 100
+                if (reward != 0)
                 {
-                    UpdateModel();
-                    SaveTrainingData(dataPath, trainingData);
-                    trainingData.Clear();
-                }
+                    trainingData.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
+                    currentSequence.Clear();
 
-                if (epsilon > minEpsilon)
-                {
-                    epsilon *= epsilonDecay;
-                }
+                    if (trainingData.Count >= 1000) // Train in batches of 1000
+                    {
+                        mls.LogWarning("saving data");
+                        UpdateModel();
+                        SaveTrainingData(dataPath, trainingData);
+                        trainingData.Clear();
+                    }
 
-                mls.LogInfo("" + $"state: {string.Join(",", state)} action: {action} reward: {reward} epsilon: {epsilon}");
+                    if (epsilon > minEpsilon)
+                    {
+                        epsilon *= epsilonDecay;
+                    }
+
+                    mls.LogInfo("state: " + string.Join(",", state) + " action: " + action + " reward: " + reward + " epsilon: " + epsilon);
+                }
             }
             catch (Exception ex)
             {
-                mls.LogError("" + $"Error running AI: {ex.Message}");
+                mls.LogError("Error running AI: " + ex.Message);
             }
         }
 
@@ -205,11 +216,17 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             Vector3 playerLocation = GetPlayerLocation();
             Vector3 targetGoalLocation = GetTargetGoalLocation();
 
-            float distanceFromPuck = GetDistanceFromPuck();
-            float isCloseToPuck = distanceFromPuck < 1.0f ? 1.0f : 0.0f;
+            float distanceFromPuck = GetDistanceFromPuck() / 100.0f; // Assuming max distance can be 100 units
+            float isCloseToPuck = distanceFromPuck < 0.01f ? 1.0f : 0.0f; // Normalized distance check
             float isAlignedWithGoal = Math.Abs((targetGoalLocation - playerLocation).x) < 1.0f ? 1.0f : 0.0f;
 
-            return new float[] { isCloseToPuck, isAlignedWithGoal };
+            return new float[]
+            {
+                puckLocation.x / 100.0f, puckLocation.y / 100.0f, puckLocation.z / 100.0f,
+                playerLocation.x / 100.0f, playerLocation.y / 100.0f, playerLocation.z / 100.0f,
+                targetGoalLocation.x / 100.0f, targetGoalLocation.z / 100.0f, isCloseToPuck,
+                isAlignedWithGoal
+            };
         }
 
         private static void PerformAction(string action)
@@ -241,13 +258,15 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static float GetReward()
         {
-            var reward = nextReward;
+            float reward = nextReward;
 
+            //reward puck going towards target goal
             float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-            float maxRewardDistance = 50.0f;
+            float maxRewardDistance = 100.0f; // Adjusted to 100 units for normalization
             float targetGoalReward = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
             reward += targetGoalReward;
 
+            //punish for puck moving away from target goal
             if (targetGoalReward == 0)
             {
                 float distanceToOwnGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
@@ -255,11 +274,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 reward -= ownGoalPenalty;
             }
 
-            //to encourage exploration?
+            //
+
+            // Encourage exploration with a small random factor
             reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
             nextReward = 0;
-            //mls.LogInfo("" + $"gave reward: {reward}");
             return reward;
         }
 
@@ -267,20 +287,35 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             try
             {
-                var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
-                var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
-                    .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                var flattenedData = FlattenTrainingData(trainingData);
+
+                // Check the dimensions of the feature vectors
+                int expectedDimension = 10; // The expected number of features
+                foreach (var item in flattenedData)
+                {
+                    if (item.Features.Length != expectedDimension)
+                    {
+                        mls.LogError("" + $"Feature vector dimension mismatch. Expected: {expectedDimension}, Actual: {item.Features.Length}");
+                        return;
+                    }
+                }
+
+                var dataView = mlContext.Data.LoadFromEnumerable(flattenedData);
+                var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(FlattenedAIInput.Reward))
+                    .Append(mlContext.Transforms.Concatenate("Features", nameof(FlattenedAIInput.Features)))
                     .Append(mlContext.Regression.Trainers.Sdca());
 
                 trainedModel = pipeline.Fit(dataView);
                 predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
 
                 // Save the model
+                mls.LogWarning("Saving the model to " + modelPath);
                 mlContext.Model.Save(trainedModel, dataView.Schema, modelPath);
+                mls.LogWarning("Model saved successfully.");
             }
             catch (Exception ex)
             {
-                mls.LogError("" + $"Error updating model: {ex.Message}");
+                mls.LogError("Error updating model: " + ex.Message);
             }
         }
 
@@ -288,22 +323,25 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
             {
-                mls.LogError("" + $"Failed to resolve assembly: {args.Name}");
+                mls.LogError("Failed to resolve assembly: " + args.Name);
                 return null;
             };
         }
 
-        private static void SaveTrainingData(string path, List<AIInput> data)
+        private static void SaveTrainingData(string path, List<AISequence> data)
         {
             try
             {
                 //mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
                 using (var writer = new StreamWriter(path, false)) // False to overwrite the file
                 {
-                    foreach (var item in data)
+                    foreach (var sequence in data)
                     {
-                        //mls.LogInfo("" + $"Writing data: {item.Features[0]},{item.Features[1]},{item.Reward}");
-                        writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
+                        foreach (var item in sequence.Inputs)
+                        {
+                            //mls.LogInfo("" + $"Writing data: {string.Join(",", item.Features)},{item.Reward}");
+                            writer.WriteLine($"{string.Join(",", item.Features)},{item.Reward}");
+                        }
                     }
                 }
 
@@ -311,53 +349,85 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
             catch (IOException ex)
             {
-                mls.LogError("" + $"Error saving training data: {ex.Message}");
+                mls.LogError("Error saving training data: " + ex.Message);
             }
         }
 
-
-        private static List<AIInput> LoadTrainingData(string path)
+        private static List<AISequence> LoadTrainingData(string path)
         {
-            var data = new List<AIInput>();
+            var data = new List<AISequence>();
             try
             {
                 using (var reader = new StreamReader(path))
                 {
+                    var currentSequence = new List<AIInput>();
                     while (!reader.EndOfStream)
                     {
                         var line = reader.ReadLine();
                         var values = line.Split(',');
 
-                        if (values.Length != 3) // Ensure the line has the correct number of values
+                        if (values.Length != 11) // Ensure the line has the correct number of values
                         {
                             continue;
                         }
 
-                        var features = new float[2];
-                        features[0] = float.Parse(values[0]);
-                        features[1] = float.Parse(values[1]);
-                        var reward = float.Parse(values[2]);
+                        var features = new float[10];
+                        for (int i = 0; i < 10; i++)
+                        {
+                            features[i] = float.Parse(values[i]);
+                        }
+                        var reward = float.Parse(values[10]);
 
-                        data.Add(new AIInput { Features = features, Reward = reward });
+                        currentSequence.Add(new AIInput { Features = features, Reward = reward });
+
+                        if (reward != 0) // Sequence ends when a reward is given
+                        {
+                            data.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
+                            currentSequence.Clear();
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                mls.LogError("" + $"Error loading training data: {ex.Message}");
+                mls.LogError("Error loading training data: " + ex.Message);
             }
             return data;
+        }
+
+        private static List<FlattenedAIInput> FlattenTrainingData(List<AISequence> sequences)
+        {
+            var flattenedData = new List<FlattenedAIInput>();
+            foreach (var sequence in sequences)
+            {
+                foreach (var input in sequence.Inputs)
+                {
+                    if (input.Features.Length != 10)
+                    {
+                        mls.LogError("" + $"Feature vector dimension mismatch in FlattenTrainingData. Expected: 10, Actual: {input.Features.Length}");
+                        continue; // Skip this entry to prevent dimensionality issues
+                    }
+                    flattenedData.Add(new FlattenedAIInput { Features = input.Features, Reward = input.Reward });
+                }
+            }
+            return flattenedData;
         }
 
         #region get information
         private static Vector3 GetPuckLocation()
         {
-            return localPlayer.GetNearestPuck().transform.position;
+            var puck = localPlayer?.GetNearestPuck()?.transform?.position ?? Vector3.zero;
+            if (puck == null)
+            {
+                mls.LogError("Puck location is null");
+                return Vector3.zero;
+            }
+            return puck;
         }
 
         private static Vector3 GetPlayerLocation()
         {
-            return localPlayer.playerRigidbody.transform.position;
+            return localPlayer?.playerRigidbody?.transform?.position ?? Vector3.zero;
         }
 
         private static float GetDistanceFromPuck()
@@ -372,7 +442,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static Vector3 GetTargetGoalLocation()
         {
-            if (localPlayer.player.team == Team.Home)
+            if (localPlayer?.player?.team == Team.Home)
             {
                 return new Vector3(0, 0, -57);
             }
@@ -382,7 +452,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static Vector3 GetDefendingGoalLocation()
         {
-            if (localPlayer.player.team == Team.Home)
+            if (localPlayer?.player?.team == Team.Home)
             {
                 return new Vector3(0, 0, 57);
             }
@@ -472,7 +542,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (goalScored.Team == PlayerControllerPatch.GetPlayerTeam())
             {
                 PlayerControllerPatch.nextReward = 250f;
-                if (goalScored.ScorerID == PlayerControllerPatch.localPlayer.player.Id)
+                if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
                 {
                     PlayerControllerPatch.nextReward += 250f;
                 }
@@ -488,7 +558,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
 public class AIInput
 {
-    [VectorType(2)]
+    [VectorType(10)]
     public float[] Features { get; set; }
     public float Reward { get; set; }
 }
@@ -496,4 +566,16 @@ public class AIInput
 public class AIOutput
 {
     public string Action { get; set; }
+}
+
+public class AISequence
+{
+    public List<AIInput> Inputs { get; set; }
+}
+
+public class FlattenedAIInput
+{
+    [VectorType(10)]
+    public float[] Features { get; set; }
+    public float Reward { get; set; }
 }
