@@ -51,8 +51,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.7f; // Start with a 10% chance of exploration
-        private static float epsilonDecay = 0.999f; // Decay rate to reduce exploration over time
+        private static float epsilon = 0.6f; // Start with a 10% chance of exploration
+        private static float epsilonDecay = 0.9999f; // Decay rate to reduce exploration over time
         private static float minEpsilon = 0.1f; // Minimum exploration probability
 
         [HarmonyPatch("Update")]
@@ -206,7 +206,21 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static string GetRandomAction()
         {
-            var actions = new List<string> { "move_towards_puck", "lift_stick", "lower_stick", "spin_clockwise", "spin_counterclockwise" };
+            var actions = new List<string> { 
+                "move_towards_puck",
+                "move_north",
+                "move_south",
+                "move_east",
+                "move_west",
+                "move_northeast",
+                "move_northwest",
+                "move_southeast",
+                "move_southwest",
+                "lift_stick", 
+                "lower_stick", 
+                "spin_clockwise", 
+                "spin_counterclockwise" 
+            };
             return actions[random.Next(actions.Count)];
         }
 
@@ -236,6 +250,34 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 case "move_towards_puck":
                     MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
+                    break;
+                case "move_north":
+                    MoveForward();
+                    break;
+                case "move_south":
+                    MoveBackward();
+                    break;
+                case "move_east":
+                    MoveRight();
+                    break;
+                case "move_west":
+                    MoveLeft();
+                    break;
+                case "move_northeast":
+                    MoveRight();
+                    MoveForward();
+                    break;
+                case "move_northwest":
+                    MoveForward();
+                    MoveLeft();
+                    break;
+                case "move_southeast":
+                    MoveBackward();
+                    MoveRight();
+                    break;
+                case "move_southwest":
+                    MoveBackward();
+                    MoveLeft();
                     break;
                 case "lift_stick":
                     pickStickUp();
@@ -466,42 +508,42 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             if (direction.z > 0)
             {
-                movement1(); // Move forward
+                MoveForward(); // Move forward
             }
             else
             {
-                movement2(); // Move backward
+                MoveBackward(); // Move backward
             }
 
             if (direction.x > 0)
             {
-                movement4(); // Move right
+                MoveRight(); // Move right
             }
             else
             {
-                movement3(); // Move left
+                MoveLeft(); // Move left
             }
         }
 
-        private static void movement1()
+        private static void MoveForward()
         {
             inputSimulator.Keyboard.KeyDown(forwardKey);
             inputSimulator.Keyboard.KeyUp(forwardKey);
         }
 
-        private static void movement2()
+        private static void MoveBackward()
         {
             inputSimulator.Keyboard.KeyDown(backwardKey);
             inputSimulator.Keyboard.KeyUp(backwardKey);
         }
 
-        private static void movement3()
+        private static void MoveLeft()
         {
             inputSimulator.Keyboard.KeyDown(leftKey);
             inputSimulator.Keyboard.KeyUp(leftKey);
         }
 
-        private static void movement4()
+        private static void MoveRight()
         {
             inputSimulator.Keyboard.KeyDown(rightKey);
             inputSimulator.Keyboard.KeyUp(rightKey);
