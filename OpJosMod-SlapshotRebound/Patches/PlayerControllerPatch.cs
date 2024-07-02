@@ -43,6 +43,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static VirtualKeyCode backwardKey = VirtualKeyCode.VK_S;
         private static VirtualKeyCode leftKey = VirtualKeyCode.VK_A;
         private static VirtualKeyCode rightKey = VirtualKeyCode.VK_D;
+        private static VirtualKeyCode breakKey = VirtualKeyCode.SPACE;
 
         private static MLContext mlContext;
         private static PredictionEngine<AIInput, AIOutput> predictionEngine;
@@ -58,7 +59,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.6f; // Start with a 10% chance of exploration
+        private static float epsilon = 0.7f; // Start with a 10% chance of exploration
         private static float epsilonDecay = 0.9999f; // Decay rate to reduce exploration over time
         private static float minEpsilon = 0.1f; // Minimum exploration probability
 
@@ -195,7 +196,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     trainingData.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
                     currentSequence.Clear();
 
-                    if (trainingData.Count >= 1000) // Train in batches of 1000
+                    if (trainingData.Count >= 10000) // Train in batches of 10,000
                     {
                         mls.LogWarning("saving data");
                         UpdateModel();
@@ -221,6 +222,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             var actions = new List<string> { 
                 "move_towards_puck",
+                "stop_move",
                 "move_north",
                 "move_south",
                 "move_east",
@@ -290,6 +292,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 case "move_towards_puck":
                     MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
                     break;
+                case "stop_move":
+                    Break();
+                    break;
                 case "move_north":
                     MoveForward();
                     break;
@@ -348,7 +353,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 10 / distanceToTargetGoal;
+                    float targetGoalReward = 25 / distanceToTargetGoal;
                     reward += targetGoalReward;
                 }
 
@@ -356,7 +361,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToDefendingGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 10 / distanceToDefendingGoal;
+                    float penalty = 25 / distanceToDefendingGoal;
                     reward -= penalty * 2;
                 }
             }
@@ -369,7 +374,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 10 / distanceToTargetGoal;
+                    float targetGoalReward = 25 / distanceToTargetGoal;
                     reward += targetGoalReward;
                 }
 
@@ -377,7 +382,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 10 / distanceToTargetGoal;
+                    float penalty = 25 / distanceToTargetGoal;
                     reward -= penalty * 2;
                 }
             }
@@ -407,7 +412,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             float decayFactor = 0.99f; // Decay factor for propagating rewards
             float reward = finalReward;
 
-            int maxStepsBack = 100;
+            int maxStepsBack = 1000;
             int steps = 0;
 
             for (int i = currentSequence.Count - 1; i >= 0; i--)
@@ -703,6 +708,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             inputSimulator.Keyboard.KeyDown(rightKey);
             inputSimulator.Keyboard.KeyUp(rightKey);
+        }
+
+        private static void Break()
+        {
+            inputSimulator.Keyboard.KeyDown(breakKey);
+            inputSimulator.Keyboard.KeyUp(breakKey);
         }
 
         private static void pickStickUp()
