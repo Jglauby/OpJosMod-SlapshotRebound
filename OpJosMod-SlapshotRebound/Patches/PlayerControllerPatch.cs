@@ -3,6 +3,7 @@ using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using OpJosModSlapshotRebound.AIPlayer.Patches;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +16,11 @@ using Random = System.Random;
 
 namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
+    public static class Constants
+    {
+        public const int ExpectedFeatures = 21;
+    }
+
     [HarmonyPatch(typeof(PlayerController))]
     internal class PlayerControllerPatch
     {
@@ -78,6 +84,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (aiEnabled)
             {
                 RunAI();
+            }
+
+            if (Input.GetKeyInt(KeyCode.C))
+            {
+                mls.LogInfo(GetStickRotation().eulerAngles / 360.0f);
             }
         }
 
@@ -231,18 +242,44 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             Vector3 puckLocation = GetPuckLocation();
             Vector3 playerLocation = GetPlayerLocation();
             Vector3 targetGoalLocation = GetTargetGoalLocation();
+            Quaternion stickRotation = GetStickRotation();
 
+            Vector3 stickRotationEuler = stickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
+            List<Vector3> teammates = GetTeamMatesLocation();
+            List<Vector3> opponents = GetOpponentsLocation();
+
+            // Convert positions to a flat array (excluding Y values)
+            List<float> state = new List<float>
+            {
+                puckLocation.x / 100.0f, puckLocation.z / 100.0f,
+                playerLocation.x / 100.0f, playerLocation.z / 100.0f,
+                targetGoalLocation.x / 100.0f, targetGoalLocation.z / 100.0f,
+                stickRotationEuler.y
+            };
+
+            // Add teammate positions (excluding Y values)
+            foreach (var teammate in teammates)
+            {
+                state.Add(teammate.x / 100.0f);
+                state.Add(teammate.z / 100.0f);
+            }
+
+            // Add opponent positions (excluding Y values)
+            foreach (var opponent in opponents)
+            {
+                state.Add(opponent.x / 100.0f);
+                state.Add(opponent.z / 100.0f);
+            }
+
+            // Additional state information
             float distanceFromPuck = GetDistanceFromPuck() / 100.0f; // Assuming max distance can be 100 units
             float isCloseToPuck = distanceFromPuck < 0.01f ? 1.0f : 0.0f; // Normalized distance check
             float isAlignedWithGoal = Math.Abs((targetGoalLocation - playerLocation).x) < 1.0f ? 1.0f : 0.0f;
 
-            return new float[]
-            {
-                puckLocation.x / 100.0f, puckLocation.y / 100.0f, puckLocation.z / 100.0f,
-                playerLocation.x / 100.0f, playerLocation.y / 100.0f, playerLocation.z / 100.0f,
-                targetGoalLocation.x / 100.0f, targetGoalLocation.z / 100.0f, isCloseToPuck,
-                isAlignedWithGoal
-            };
+            state.Add(isCloseToPuck);
+            state.Add(isAlignedWithGoal);
+
+            return state.ToArray();
         }
 
         private static void PerformAction(string action)
@@ -359,7 +396,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 var flattenedData = FlattenTrainingData(trainingData);
 
                 // Check the dimensions of the feature vectors
-                int expectedDimension = 10; // The expected number of features
+                int expectedDimension = Constants.ExpectedFeatures; // The expected number of features
                 foreach (var item in flattenedData)
                 {
                     if (item.Features.Length != expectedDimension)
@@ -471,9 +508,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 foreach (var input in sequence.Inputs)
                 {
-                    if (input.Features.Length != 10)
+                    if (input.Features.Length != Constants.ExpectedFeatures)
                     {
-                        mls.LogError("" + $"Feature vector dimension mismatch in FlattenTrainingData. Expected: 10, Actual: {input.Features.Length}");
+                        mls.LogError("" + $"Feature vector dimension mismatch in FlattenTrainingData. Expected: {Constants.ExpectedFeatures}, Actual: {input.Features.Length}");
                         continue; // Skip this entry to prevent dimensionality issues
                     }
                     flattenedData.Add(new FlattenedAIInput { Features = input.Features, Reward = input.Reward });
@@ -527,6 +564,39 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
 
             return new Vector3(0, 0, -57);
+        }
+
+        private static List<Vector3> GetTeamMatesLocation()
+        {
+            List<Vector3> result = new List<Vector3>();
+            foreach (Player player in game.Players.Values)
+            {
+                if (player.Team == GetPlayerTeam())
+                {
+                    result.Add(player.playerController.playerRigidbody.transform.position);
+                }
+            }
+
+            return result;
+        }
+
+        private static List<Vector3> GetOpponentsLocation()
+        {
+            List<Vector3> result = new List<Vector3>();
+            foreach (Player player in game.Players.Values)
+            {
+                if (player.Team != GetPlayerTeam())
+                {
+                    result.Add(player.playerController.playerRigidbody.transform.position);
+                }
+            }
+
+            return result;
+        }
+
+        public static Quaternion GetStickRotation()
+        {
+            return localPlayer.handsRotatorRigidbody.rotation;
         }
         #endregion
 
@@ -627,7 +697,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
 public class AIInput
 {
-    [VectorType(10)]
+    [VectorType(Constants.ExpectedFeatures)]
     public float[] Features { get; set; }
     public float Reward { get; set; }
 }
@@ -644,7 +714,7 @@ public class AISequence
 
 public class FlattenedAIInput
 {
-    [VectorType(10)]
+    [VectorType(Constants.ExpectedFeatures)]
     public float[] Features { get; set; }
     public float Reward { get; set; }
 }
