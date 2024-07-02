@@ -1,12 +1,19 @@
 ﻿using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
+using Microsoft.ML;
+using Microsoft.ML.Data;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Threading.Tasks;
+using System.Threading;
 using UnityEngine;
 using WindowsInput;
 using WindowsInput.Native;
 using KeyCode = BepInEx.Unity.IL2CPP.UnityEngine.KeyCode;
+using Random = System.Random;
 
 namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
@@ -17,6 +24,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static void SetLogSource(ManualLogSource source)
         {
             mls = source;
+            SetupAssemblyResolver();
         }
 
         private static bool aiEnabled = false;
@@ -32,15 +40,21 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static VirtualKeyCode leftKey = VirtualKeyCode.VK_A;
         private static VirtualKeyCode rightKey = VirtualKeyCode.VK_D;
 
-        private static System.Random random = new System.Random();
+        private static MLContext mlContext;
+        private static PredictionEngine<AIInput, AIOutput> predictionEngine;
+        private static ITransformer trainedModel;
+        private static List<AIInput> trainingData = new List<AIInput>();
 
-        private static Dictionary<string, float> qTable = new Dictionary<string, float>();
-        private static string previousState = "";
-        private static string previousAction = "";
-        private static float learningRate = 0.1f;
-        private static float discountFactor = 0.9f;
+        private static readonly string pluginDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        private static readonly string modelPath = Path.Combine(pluginDirectory, "MLModel.zip");
+        private static readonly string dataPath = Path.Combine(pluginDirectory, "trainingData.csv");
 
         public static float nextReward = 0f;
+
+        private static readonly object fileLock = new object();
+
+        private static bool explorationPhase = true;
+        private static Random random = new Random();
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -71,51 +85,125 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             aiEnabled = !aiEnabled;
             mls.LogInfo("AI " + (aiEnabled ? "enabled" : "disabled"));
+
+            if (aiEnabled)
+            {
+                InitializeML();
+            }
         }
 
-        private static void RunAI()
+        private static void InitializeML()
         {
-            string state = GetCurrentState();
-            string action = ChooseAction(state);
+            try
+            {
+                mlContext = new MLContext();
 
-            PerformAction(action);
+                if (File.Exists(modelPath))
+                {
+                    trainedModel = mlContext.Model.Load(modelPath, out _);
+                    predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
+                }
+                else
+                {
+                    var initialData = new List<AIInput>
+                    {
+                        new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
+                        new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
+                    };
+                    var dataView = mlContext.Data.LoadFromEnumerable(initialData);
 
-            float reward = GetReward();
-            UpdateQTable(state, action, reward);
+                    var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
+                        .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                        .Append(mlContext.Regression.Trainers.Sdca());
 
-            previousState = state;
-            previousAction = action;
+                    trainedModel = pipeline.Fit(dataView);
+                    predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
+                }
 
-            //mls.LogInfo("state: " + state + " action: " + action);
+                if (File.Exists(dataPath))
+                {
+                    trainingData = LoadTrainingData(dataPath);
+                }
+                else
+                {
+                    trainingData = new List<AIInput>
+                    {
+                        new AIInput { Features = new float[] { 1.0f, 0.0f }, Reward = 0.5f },
+                        new AIInput { Features = new float[] { 0.0f, 1.0f }, Reward = 0.2f },
+                    };
+                    SaveTrainingData(dataPath, trainingData);
+                }
+            }
+            catch (Exception ex)
+            {
+                mls.LogError("" + $"Error initializing ML: {ex.Message}");
+            }
         }
 
-        private static string GetCurrentState()
+        private static async void RunAI()
+        {
+            try
+            {
+                float[] state = GetCurrentState();
+                AIInput input = new AIInput { Features = state, Reward = nextReward };
+
+                string action;
+
+                if (explorationPhase)
+                {
+                    // Take a random action during the exploration phase
+                    action = GetRandomAction();
+                }
+                else
+                {
+                    // Use the model to predict the action
+                    AIOutput prediction = await Task.Run(() => predictionEngine.Predict(input));
+                    action = prediction?.Action ?? "invalid_action";
+                }
+
+                if (action == "invalid_action" || string.IsNullOrEmpty(action))
+                {
+                    mls.LogError("AI did not provide a valid action. Defaulting to move_towards_puck.");
+                    action = "move_towards_puck"; // Default action if invalid
+                }
+
+                PerformAction(action);
+
+                float reward = GetReward();
+                trainingData.Add(new AIInput { Features = state, Reward = reward });
+
+                if (trainingData.Count >= 100) // Train in batches of 100
+                {
+                    UpdateModel();
+                    SaveTrainingData(dataPath, trainingData);
+                    explorationPhase = false; // Exit exploration phase after enough data is collected
+                }
+
+                mls.LogInfo("" + $"state: {string.Join(",", state)} action: {action} reward: {reward}");
+            }
+            catch (Exception ex)
+            {
+                mls.LogError("" + $"Error running AI: {ex.Message}");
+            }
+        }
+
+        private static string GetRandomAction()
+        {
+            var actions = new List<string> { "move_towards_puck", "shoot_left", "shoot_right", "spin_clockwise", "spin_counterclockwise" };
+            return actions[random.Next(actions.Count)];
+        }
+
+        private static float[] GetCurrentState()
         {
             Vector3 puckLocation = GetPuckLocation();
             Vector3 playerLocation = GetPlayerLocation();
             Vector3 targetGoalLocation = GetTargetGoalLocation();
 
             float distanceFromPuck = GetDistanceFromPuck();
-            bool isCloseToPuck = distanceFromPuck < 1.0f;
-            bool isAlignedWithGoal = Math.Abs((targetGoalLocation - playerLocation).x) < 1.0f;
+            float isCloseToPuck = distanceFromPuck < 1.0f ? 1.0f : 0.0f;
+            float isAlignedWithGoal = Math.Abs((targetGoalLocation - playerLocation).x) < 1.0f ? 1.0f : 0.0f;
 
-            return $"{isCloseToPuck}_{isAlignedWithGoal}";
-        }
-
-        private static string ChooseAction(string state)
-        {
-            if (!qTable.ContainsKey(state))
-            {
-                qTable[state] = 0.0f;
-            }
-
-            if (random.NextDouble() < 0.1) // epsilon-greedy exploration
-            {
-                string[] actions = { "move_towards_puck", "shoot_left", "shoot_right", "spin_clockwise", "spin_counterclockwise" };
-                return actions[random.Next(actions.Length)];
-            }
-
-            return qTable[state] >= 0 ? "shoot_left" : "move_towards_puck";
+            return new float[] { isCloseToPuck, isAlignedWithGoal };
         }
 
         private static void PerformAction(string action)
@@ -137,24 +225,22 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 case "spin_counterclockwise":
                     spinCounterClockwise();
                     break;
+                default:
+                    mls.LogError("" + $"Unknown action: {action}. Defaulting to move_towards_puck.");
+                    MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
+                    break;
             }
         }
 
         private static float GetReward()
         {
-            var reward = 0.0f;
-            if (nextReward != 0)
-            {
-                reward = nextReward;
-            }
+            var reward = nextReward;
 
-            //reward for hitting towards target goal
             float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-            float maxRewardDistance = 50.0f; 
-            float targetGoalReward = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance)); 
+            float maxRewardDistance = 50.0f;
+            float targetGoalReward = Mathf.Lerp(0.0f, 1.0f, 1.0f - Mathf.Clamp01(distanceToTargetGoal / maxRewardDistance));
             reward += targetGoalReward;
 
-            //remove points when its headed towards defendign goal
             if (targetGoalReward == 0)
             {
                 float distanceToOwnGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
@@ -162,49 +248,105 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 reward -= ownGoalPenalty;
             }
 
+            //to encourage exploration?
+            reward += UnityEngine.Random.Range(-0.05f, 0.05f);
+
             nextReward = 0;
-            mls.LogInfo("gave reward: " + reward);
+            mls.LogInfo("" + $"gave reward: {reward}");
             return reward;
         }
 
-        private static void UpdateQTable(string state, string action, float reward)
+        private static void UpdateModel()
         {
-            if (!qTable.ContainsKey(state))
+            try
             {
-                qTable[state] = 0.0f;
-            }
+                lock (fileLock)
+                {
+                    var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
+                    var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
+                        .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                        .Append(mlContext.Regression.Trainers.Sdca());
 
-            float oldValue = qTable[state];
-            float newValue = oldValue + learningRate * (reward + discountFactor * GetMaxQValue(state) - oldValue);
-            qTable[state] = newValue;
+                    trainedModel = pipeline.Fit(dataView);
+                    predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
+
+                    // Save the model
+                    mlContext.Model.Save(trainedModel, dataView.Schema, modelPath);
+
+                    // Clear training data after training
+                    trainingData.Clear();
+                }
+            }
+            catch (Exception ex)
+            {
+                mls.LogError("" + $"Error updating model: {ex.Message}");
+            }
         }
 
-        private static float GetMaxQValue(string state)
+        public static void SetupAssemblyResolver()
         {
-            // Placeholder for Q-value calculation
-            // In a real scenario, this would return the maximum Q-value for the given state
-            return 0.0f;
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            {
+                mls.LogError("" + $"Failed to resolve assembly: {args.Name}");
+                return null;
+            };
         }
 
-        private static void MoveTowardsDirection(Vector3 direction)
+        private static void SaveTrainingData(string path, List<AIInput> data)
         {
-            if (direction.z > 0)
+            try
             {
-                movement1(); // Move forward
+                lock (fileLock)
+                {
+                    using (var writer = new StreamWriter(path, false)) // False to overwrite the file
+                    {
+                        foreach (var item in data)
+                        {
+                            writer.WriteLine($"{item.Features[0]},{item.Features[1]},{item.Reward}");
+                        }
+                    }
+                }
             }
-            else
+            catch (IOException ex)
             {
-                movement2(); // Move backward
+                mls.LogError("" + $"Error saving training data: {ex.Message}");
             }
+        }
 
-            if (direction.x > 0)
+        private static List<AIInput> LoadTrainingData(string path)
+        {
+            var data = new List<AIInput>();
+            try
             {
-                movement4(); // Move right
+                lock (fileLock)
+                {
+                    using (var reader = new StreamReader(path))
+                    {
+                        while (!reader.EndOfStream)
+                        {
+                            var line = reader.ReadLine();
+                            var values = line.Split(',');
+
+                            if (values.Length != 3) // Ensure the line has the correct number of values
+                            {
+                                continue;
+                            }
+
+                            var features = new float[2];
+                            features[0] = float.Parse(values[0]);
+                            features[1] = float.Parse(values[1]);
+                            var reward = float.Parse(values[2]);
+
+                            data.Add(new AIInput { Features = features, Reward = reward });
+                        }
+                    }
+                }
             }
-            else
+            catch (Exception ex)
             {
-                movement3(); // Move left
+                mls.LogError("" + $"Error loading training data: {ex.Message}");
             }
+            return data;
         }
 
         #region get information
@@ -226,34 +368,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static Team GetPlayerTeam()
         {
             return localPlayer.player.team;
-        }
-
-        private static List<Vector3> GetTeamMatesLocation()
-        {
-            List<Vector3> result = new List<Vector3>();
-            foreach (Player player in game.Players.Values)
-            {
-                if (player.Team == GetPlayerTeam())
-                {
-                    result.Add(player.playerController.playerRigidbody.transform.position);
-                }
-            }
-
-            return result;
-        }
-
-        private static List<Vector3> GetOpponentsLocation()
-        {
-            List<Vector3> result = new List<Vector3>();
-            foreach (Player player in game.Players.Values)
-            {
-                if (player.Team != GetPlayerTeam())
-                {
-                    result.Add(player.playerController.playerRigidbody.transform.position);
-                }
-            }
-
-            return result;
         }
 
         private static Vector3 GetTargetGoalLocation()
@@ -278,6 +392,27 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         #endregion
 
         #region control player
+        private static void MoveTowardsDirection(Vector3 direction)
+        {
+            if (direction.z > 0)
+            {
+                movement1(); // Move forward
+            }
+            else
+            {
+                movement2(); // Move backward
+            }
+
+            if (direction.x > 0)
+            {
+                movement4(); // Move right
+            }
+            else
+            {
+                movement3(); // Move left
+            }
+        }
+
         private static void movement1()
         {
             inputSimulator.Keyboard.KeyDown(forwardKey);
@@ -339,7 +474,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 PlayerControllerPatch.nextReward = 250f;
                 if (goalScored.ScorerID == PlayerControllerPatch.localPlayer.player.Id)
                 {
-                    PlayerControllerPatch.nextReward = 250f;
+                    PlayerControllerPatch.nextReward += 250f;
                 }
             }
             else
@@ -349,4 +484,16 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         }
     }
     #endregion
+}
+
+public class AIInput
+{
+    [VectorType(2)]
+    public float[] Features { get; set; }
+    public float Reward { get; set; }
+}
+
+public class AIOutput
+{
+    public string Action { get; set; }
 }
