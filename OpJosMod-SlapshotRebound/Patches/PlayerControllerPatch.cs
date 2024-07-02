@@ -495,7 +495,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             try
             {
-                //mls.LogInfo("" + $"Saving training data to {path}. Data count: {data.Count}");
+                mls.LogInfo("" + $"Saving training Data count: {data.Count}");
                 using (var writer = new StreamWriter(path, false)) // False to overwrite the file
                 {
                     foreach (var sequence in data)
@@ -529,17 +529,17 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         var line = reader.ReadLine();
                         var values = line.Split(',');
 
-                        if (values.Length != Constants.ExpectedFeatures) // Ensure the line has the correct number of values
+                        if (values.Length == Constants.ExpectedFeatures) // Ensure the line has the correct number of values
                         {
                             continue;
                         }
 
-                        var features = new float[10];
-                        for (int i = 0; i < 10; i++)
+                        var features = new float[Constants.ExpectedFeatures];
+                        for (int i = 0; i < Constants.ExpectedFeatures; i++)
                         {
                             features[i] = float.Parse(values[i]);
                         }
-                        var reward = float.Parse(values[10]);
+                        var reward = float.Parse(values[Constants.ExpectedFeatures]);
 
                         currentSequence.Add(new AIInput { Features = features, Reward = reward });
 
@@ -555,6 +555,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 mls.LogError("Error loading training data: " + ex.Message);
             }
+            mls.LogInfo("loaded data with " +  data.Count + " records");
             return data;
         }
 
