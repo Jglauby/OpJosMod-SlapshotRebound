@@ -208,7 +208,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         epsilon *= epsilonDecay;
                     }
 
-                    mls.LogInfo("state: " + string.Join(",", state) + " action: " + action + " reward: " + reward + " epsilon: " + epsilon);
+                    //mls.LogInfo("state: " + string.Join(",", state) + " action: " + action + " reward: " + reward + " epsilon: " + epsilon);
                 }
             }
             catch (Exception ex)
@@ -382,11 +382,38 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             // Encourage exploration with a small random factor
             reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
-            //look into retroactive reward giving
-            //like the trainingData, like maybe go back 100 records and add some sort of reward scalign down with how far back it is
+            PropagateRewards(reward);
+
+            if (reward > 0)
+                mls.LogWarning("Positive Feedback: " + reward);
+            else
+                mls.LogError("Negative Feedback: " +  reward);
 
             nextReward = 0;
             return reward;
+        }
+
+        private static void PropagateRewards(float finalReward)
+        {
+            float decayFactor = 0.99f; // Decay factor for propagating rewards
+            float reward = finalReward;
+
+            int maxStepsBack = 100;
+            int steps = 0;
+
+            for (int i = currentSequence.Count - 1; i >= 0; i--)
+            {
+                if (steps < maxStepsBack)
+                {
+                    currentSequence[i].Reward += reward;
+                    reward *= decayFactor; 
+                }
+
+                steps++;
+            }
+
+            trainingData.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
+            currentSequence.Clear();
         }
 
         private static void UpdateModel()
