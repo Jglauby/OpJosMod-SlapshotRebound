@@ -20,7 +20,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
     public static class Constants
     {
-        public const int ExpectedFeatures = 21;
+        public const int ExpectedFeatures = 21; //needs to match the size of what we store
+        public const int DataSetSize = 50000;
     }
 
     [HarmonyPatch(typeof(PlayerController))]
@@ -201,7 +202,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     trainingData.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
                     currentSequence.Clear();
 
-                    if (trainingData.Count >= 20000) // Train in batches of 20,000
+                    if (trainingData.Count >= Constants.DataSetSize)
                     {
                         UpdateModel();
                         SaveTrainingData(dataPath, trainingData);
