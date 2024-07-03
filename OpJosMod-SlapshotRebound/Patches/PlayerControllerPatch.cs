@@ -21,6 +21,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     public static class Constants
     {
         public const int ExpectedFeatures = 21; //needs to match the size of what we store
+        public const bool isTraining = true;
         public const int DataSetSize = 50000;
     }
 
@@ -806,6 +807,14 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 PlayerControllerPatch.nextReward = -5000f;
             }
+        }
+
+        [HarmonyPatch("Update")]
+        [HarmonyPostfix]
+        private static void UpdatePatch(Game __instance)
+        {
+            if (Constants.isTraining)
+                __instance.MatchTimer = 500;
         }
     }
     #endregion
