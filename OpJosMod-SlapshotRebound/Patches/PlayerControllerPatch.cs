@@ -366,6 +366,10 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = 0f;
 
+            //dont point reward at all when puck behind goal
+            if (Math.Abs(GetPuckLocation().z) > 57)
+                return 0f;
+
             //if hit puck away
             if (GlobalVars.puckLastHitBy == localPlayer.player.Username)
             {
@@ -373,7 +377,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 50 / distanceToTargetGoal;
+                    float targetGoalReward = 100 / distanceToTargetGoal;
                     reward += targetGoalReward;
 
                     reward += 5 / (GetPuckLocation().x + 1);
@@ -383,17 +387,62 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 50 / distanceToTargetGoal;
+                    float penalty = 100 / distanceToTargetGoal;
                     reward -= penalty * 2;
 
                     reward -= 5 / (GetPuckLocation().x + 1);
                 }
             }
 
-            //give points if teamate has puck
             if (TeamateHasPuck())
             {
-                reward += 1f;
+                if (Vector3.Distance(GetPlayerLocation(), GetTargetGoalLocation()) < Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation())) //player closer to goal than the puck is
+                {
+                    Vector3 directionToGoal = GetTargetGoalLocation() - GetPlayerLocation();
+                    Vector3 directionToPuck = GetPuckLocation() - GetPlayerLocation();
+
+                    float angle = Vector3.Angle(directionToGoal, directionToPuck);
+                    if (angle > 30.0f) // Not in direct line (angle greater than 30 degrees)
+                    {
+                        //reward based on closeness to cetner of field
+                        float proximityToCenter = 1 / (Mathf.Abs(GetPlayerLocation().x) + 1);
+                        float baseReward = 10.0f * proximityToCenter;
+                        reward += baseReward;
+
+                        //give more reward if far from other players
+                        List<Vector3> allPlayers = GetAllPlayersLocation();
+                        float minPlayerDistance = Mathf.Infinity;
+
+                        foreach (var player in allPlayers)
+                        {
+                            float distance = Vector3.Distance(GetPlayerLocation(), player);
+                            if (distance < minPlayerDistance)
+                                minPlayerDistance = distance;
+                        }
+
+                        if (minPlayerDistance > 3f) //if also not near other players add reward again
+                        {
+                            reward += baseReward;
+                        }
+                    }
+                }
+            }
+            else if (OpponentHasPuck())
+            {
+                if (Vector3.Distance(GetPlayerLocation(), GetDefendingGoalLocation()) < Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation())) // player closer to goal than the puck is
+                {
+                    Vector3 directionToGoal = GetDefendingGoalLocation() - GetPlayerLocation();
+                    Vector3 directionToPuck = GetPuckLocation() - GetPlayerLocation();
+
+                    // Reward based on how "in the way" the player is
+                    float angle = Vector3.Angle(directionToGoal, directionToPuck);
+                    float angleReward = Mathf.Cos(angle * Mathf.Deg2Rad);
+
+                    float baseReward = 20.0f * angleReward;
+
+                    if (angle < 10)
+                        reward += baseReward;
+                }
             }
 
             reward += nextReward;
@@ -648,6 +697,17 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             return result;
         }
 
+        private static List<Vector3> GetAllPlayersLocation()
+        {
+            List<Vector3> result = new List<Vector3>();
+            foreach (Player player in game.Players.Values)
+            { 
+                result.Add(player.playerController.playerRigidbody.transform.position);             
+            }
+
+            return result;
+        }
+
         public static Quaternion GetStickRotation()
         {
             return localPlayer.handsRotatorRigidbody.rotation;
@@ -656,20 +716,43 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static bool TeamateHasPuck()
         {
             //player too close
-            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 3)
+            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 2)
                 return false;
 
             //opponent too close
             foreach (Vector3 playerLoc in GetOpponentsLocation())
             {
-                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 3)
+                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 2)
                     return false;
             }
 
             //teamamte close
             foreach (Vector3 playerLoc in GetTeamMatesLocation())
             {
-                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 3)
+                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 2)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static bool OpponentHasPuck()
+        {
+            //player too close
+            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 2)
+                return false;
+
+            //teamamte too close
+            foreach (Vector3 playerLoc in GetTeamMatesLocation())
+            {
+                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 2)
+                    return false;
+            }
+
+            //opponent close
+            foreach (Vector3 playerLoc in GetOpponentsLocation())
+            {
+                if (Vector3.Distance(playerLoc, GetPuckLocation()) < 2)
                     return true;
             }
 
