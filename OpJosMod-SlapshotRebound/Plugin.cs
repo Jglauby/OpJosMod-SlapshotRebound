@@ -40,6 +40,7 @@ namespace OpJosModSlapshotRebound.AIPlayer
 
             mls.LogInfo(modName + " has loaded");
 
+            PuckPatch.SetLogSource(mls);
             PlayerControllerPatch.SetLogSource(mls);
             harmony.PatchAll();
         }

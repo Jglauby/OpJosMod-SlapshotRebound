@@ -22,7 +22,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     {
         public const int ExpectedFeatures = 21; //needs to match the size of what we store
         public const bool isTraining = true;
-        public const int DataSetSize = 50000;
+        public const int DataSetSize = 90000;
+    }
+
+    public static class GlobalVars
+    {
+        public static string puckLastHitBy = string.Empty;
     }
 
     [HarmonyPatch(typeof(PlayerController))]
@@ -361,29 +366,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = 0f;
 
-            //next to puck
-            if (Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) < 2)
-            {
-                //pushing towards target goal
-                if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
-                {
-                    float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 25 / distanceToTargetGoal;
-                    reward += targetGoalReward;
-                }
-
-                //pushing towards own goal
-                if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
-                {
-                    float distanceToDefendingGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 25 / distanceToDefendingGoal;
-                    reward -= penalty * 2;
-                }
-            }
-
             //if hit puck away
-            if (Vector3.Distance(GetPlayerLocation(), previousPuckPosition) < 3 &&
-                Vector3.Distance(GetPlayerLocation(), GetPuckLocation()) > 3) 
+            if (GlobalVars.puckLastHitBy == localPlayer.player.Username)
             {
                 //now closer to target
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
@@ -391,6 +375,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
                     float targetGoalReward = 50 / distanceToTargetGoal;
                     reward += targetGoalReward;
+
+                    reward += 5 / (GetPuckLocation().x + 1);
                 }
 
                 //now closer to own goal
@@ -399,26 +385,32 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
                     float penalty = 50 / distanceToTargetGoal;
                     reward -= penalty * 2;
+
+                    reward -= 5 / (GetPuckLocation().x + 1);
                 }
             }
 
             //give points if teamate has puck
             if (TeamateHasPuck())
             {
-                reward += 5f;
+                reward += 1f;
             }
 
             reward += nextReward;
 
             // Encourage exploration with a small random factor
-            reward += UnityEngine.Random.Range(-0.05f, 0.05f);
+            if (reward > 0.09)
+                reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
             PropagateRewards(reward);
 
-            if (reward > 0)
-                mls.LogWarning("Positive Feedback: " + reward);
-            else
-                mls.LogInfo("Negative Feedback: " + reward);
+            if (reward != 0)
+            {
+                if (reward > 0)
+                    mls.LogWarning("Positive Feedback: " + reward);
+                else
+                    mls.LogInfo("Negative Feedback: " + reward);
+            }
 
             nextReward = 0;
             return reward;
@@ -815,6 +807,49 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             if (Constants.isTraining)
                 __instance.MatchTimer = 500;
+        }
+    }
+
+    [HarmonyPatch(typeof(Puck))]
+    internal class PuckPatch
+    {
+        public static ManualLogSource mls;
+        public static void SetLogSource(ManualLogSource source)
+        {
+            mls = source;
+        }
+
+        [HarmonyPatch("OnCollisionEnter")]
+        [HarmonyPrefix]
+        private static void OnCollisionEnterPatch(ref Collision collision)
+        {
+            //mls.LogInfo("collided with: " + collision.gameObject.name);
+            if (collision.gameObject.name == "hands")
+            {
+                Player playerController = collision.gameObject.GetComponentInParent<Player>();
+                if (playerController != null)
+                {
+                    //mls.LogMessage("Player hit puck: " + playerController.Username);
+                    GlobalVars.puckLastHitBy = playerController.Username;
+                }
+                else
+                {
+                    mls.LogError("detected player hit puck is null");
+                }
+            }
+            else if (collision.gameObject.name == "body")
+            {
+                Player playerController = collision.gameObject.GetComponentInParent<Player>();
+                if (playerController != null)
+                {
+                    //mls.LogMessage("Player bumped puck: " + playerController.Username);
+                    GlobalVars.puckLastHitBy = playerController.Username;
+                }
+                else
+                {
+                    mls.LogError("detected player hit puck is null");
+                }
+            }
         }
     }
     #endregion
