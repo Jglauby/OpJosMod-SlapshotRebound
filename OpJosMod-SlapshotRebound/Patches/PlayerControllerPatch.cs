@@ -23,6 +23,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const int ExpectedFeatures = 21; //needs to match the size of what we store
         public const bool isTraining = true;
         public const int DataSetSize = 90000;
+        public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
     }
 
     public static class GlobalVars
@@ -188,13 +189,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 {
                     // Exploitation: use the model to predict the best action
                     AIOutput prediction = predictionEngine.Predict(input);
-                    action = prediction?.Action ?? "invalid_action";
-                }
-
-                if (action == "invalid_action" || string.IsNullOrEmpty(action))
-                {
-                    //mls.LogWarning("AI did not provide a valid action. Defaulting to move_towards_puck.");
-                    action = "move_towards_puck"; // Default action if invalid
+                    action = prediction?.Action ?? "do_nothing";
                 }
 
                 PerformAction(action);
@@ -232,17 +227,26 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static string GetRandomAction()
         {
-            var actions = new List<string> { 
-                "move_towards_puck",
-                "stop_move",
-                "move_north",
-                "move_south",
-                "move_east",
-                "move_west",
-                "move_northeast",
-                "move_northwest",
-                "move_southeast",
-                "move_southwest",
+            var actions = new List<string> {
+                "do_nothing",
+                "stop_move_press",
+                "stop_move_release",
+                "move_north_press",
+                "move_north_release",
+                "move_south_press",
+                "move_south_release",
+                "move_east_press",
+                "move_east_release",
+                "move_west_press",
+                "move_west_release",
+                "move_northeast_press",
+                "move_northeast_release",
+                "move_northwest_press",
+                "move_northwest_release",
+                "move_southeast_press",
+                "move_southeast_release",
+                "move_southwest_press",
+                "move_southwest_release",
                 "lift_stick", 
                 "lower_stick", 
                 "spin_clockwise", 
@@ -303,39 +307,69 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             //mls.LogInfo("performing action: " + action);
             switch (action)
             {
-                case "move_towards_puck":
-                    MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
+                case "do_nothing":
                     break;
-                case "stop_move":
-                    Break();
+                case "stop_move_press":
+                    BreakPress();
                     break;
-                case "move_north":
-                    MoveForward();
+                case "stop_move_release":
+                    BreakRelease();
                     break;
-                case "move_south":
-                    MoveBackward();
+                case "move_north_press":
+                    MoveForwardPress();
                     break;
-                case "move_east":
-                    MoveRight();
+                case "move_north_release":
+                    MoveForwardRelease();
                     break;
-                case "move_west":
-                    MoveLeft();
+                case "move_south_press":
+                    MoveBackwardPress();
                     break;
-                case "move_northeast":
-                    MoveRight();
-                    MoveForward();
+                case "move_south_release":
+                    MoveBackwardRelease();
                     break;
-                case "move_northwest":
-                    MoveForward();
-                    MoveLeft();
+                case "move_east_press":
+                    MoveRightPress();
                     break;
-                case "move_southeast":
-                    MoveBackward();
-                    MoveRight();
+                case "move_east_release":
+                    MoveRightRelease();
                     break;
-                case "move_southwest":
-                    MoveBackward();
-                    MoveLeft();
+                case "move_west_press":
+                    MoveLeftPress();
+                    break;
+                case "move_west_release":
+                    MoveLeftRelease();
+                    break;
+                case "move_northeast_press":
+                    MoveRightPress();
+                    MoveForwardPress();
+                    break;
+                case "move_northeast_release":
+                    MoveRightRelease();
+                    MoveForwardRelease();
+                    break;
+                case "move_northwest_press":
+                    MoveForwardPress();
+                    MoveLeftPress();
+                    break;
+                case "move_northwest_release":
+                    MoveForwardRelease();
+                    MoveLeftRelease();
+                    break;
+                case "move_southeast_press":
+                    MoveBackwardPress();
+                    MoveRightPress();
+                    break;
+                case "move_southeast_release":
+                    MoveBackwardRelease();
+                    MoveRightRelease();
+                    break;
+                case "move_southwest_press":
+                    MoveBackwardPress();
+                    MoveLeftPress();
+                    break;
+                case "move_southwest_release":
+                    MoveBackwardRelease();
+                    MoveLeftRelease();
                     break;
                 case "lift_stick":
                     pickStickUp();
@@ -356,8 +390,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     spinCounterClockwiseFast();
                     break;
                 default:
-                    //mls.LogError("" + $"Unknown action: {action}. Defaulting to move_towards_puck.");
-                    MoveTowardsDirection((GetPuckLocation() - GetPlayerLocation()).normalized);
+                    mls.LogError("" + $"Unknown action: {action}. do nothing");
                     break;
             }
         }
@@ -366,8 +399,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = 0f;
 
-            //dont point reward at all when puck behind goal
-            if (Math.Abs(GetPuckLocation().z) > 57)
+            //dont point reward at all when puck or player behind goal
+            if (Math.Abs(GetPuckLocation().z) > 57 || Math.Abs(GetPlayerLocation().x) > 57)
                 return 0f;
 
             //if hit puck away
@@ -377,7 +410,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 100 / distanceToTargetGoal;
+                    float targetGoalReward = 50 / distanceToTargetGoal;
                     reward += targetGoalReward;
 
                     reward += 5 / (GetPuckLocation().x + 1);
@@ -387,7 +420,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 100 / distanceToTargetGoal;
+                    float penalty = 50 / distanceToTargetGoal;
                     reward -= penalty * 2;
 
                     reward -= 5 / (GetPuckLocation().x + 1);
@@ -445,6 +478,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 }
             }
 
+            //reward if close to puck
+            if (Vector3.Distance(GetPuckLocation(), GetPlayerLocation()) < 10)
+            {
+                float distanceToPuck = Vector3.Distance(GetPuckLocation(), GetPlayerLocation());
+                float targetReward = 5 / Math.Max(1, distanceToPuck);
+            }
+
             reward += nextReward;
 
             // Encourage exploration with a small random factor
@@ -467,7 +507,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void PropagateRewards(float finalReward)
         {
-            if (finalReward < 2)
+            if (finalReward < 0.05)
                 return;
 
             float decayFactor = 0.99f; // Decay factor for propagating rewards
@@ -761,54 +801,53 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         #endregion
 
         #region control player
-        private static void MoveTowardsDirection(Vector3 direction)
-        {
-            if (direction.z > 0)
-            {
-                MoveForward(); // Move forward
-            }
-            else
-            {
-                MoveBackward(); // Move backward
-            }
-
-            if (direction.x > 0)
-            {
-                MoveRight(); // Move right
-            }
-            else
-            {
-                MoveLeft(); // Move left
-            }
-        }
-
-        private static void MoveForward()
+        private static void MoveForwardPress()
         {
             inputSimulator.Keyboard.KeyDown(forwardKey);
+        }
+
+        private static void MoveForwardRelease()
+        {
             inputSimulator.Keyboard.KeyUp(forwardKey);
         }
 
-        private static void MoveBackward()
+        private static void MoveBackwardPress()
         {
             inputSimulator.Keyboard.KeyDown(backwardKey);
+        }
+
+        private static void MoveBackwardRelease()
+        {
             inputSimulator.Keyboard.KeyUp(backwardKey);
         }
 
-        private static void MoveLeft()
+        private static void MoveLeftPress()
         {
             inputSimulator.Keyboard.KeyDown(leftKey);
+        }
+
+        private static void MoveLeftRelease()
+        {
             inputSimulator.Keyboard.KeyUp(leftKey);
         }
 
-        private static void MoveRight()
+        private static void MoveRightPress()
         {
             inputSimulator.Keyboard.KeyDown(rightKey);
+        }
+
+        private static void MoveRightRelease()
+        {
             inputSimulator.Keyboard.KeyUp(rightKey);
         }
 
-        private static void Break()
+        private static void BreakPress()
         {
             inputSimulator.Keyboard.KeyDown(breakKey);
+        }
+
+        private static void BreakRelease()
+        {
             inputSimulator.Keyboard.KeyUp(breakKey);
         }
 
@@ -872,15 +911,15 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             if (goalScored.Team == PlayerControllerPatch.GetPlayerTeam())
             {
-                PlayerControllerPatch.nextReward = 2500f;
+                PlayerControllerPatch.nextReward = 100f;
                 if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
                 {
-                    PlayerControllerPatch.nextReward += 2500f;
+                    PlayerControllerPatch.nextReward += 2000f;
                 }
             }
             else
             {
-                PlayerControllerPatch.nextReward = -5000f;
+                PlayerControllerPatch.nextReward = -100f;
             }
         }
 
