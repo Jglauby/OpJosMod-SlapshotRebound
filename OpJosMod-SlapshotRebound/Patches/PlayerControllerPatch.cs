@@ -69,7 +69,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.7f; // Start with a 10% chance of exploration
+        private static float epsilon = 0.2f; // Start with a 10% chance of exploration
         private static float epsilonDecay = 0.995f; // Decay rate to reduce exploration over time
         private static float minEpsilon = 0.05f; // Minimum exploration probability
 
@@ -510,7 +510,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (finalReward < 0.05)
                 return;
 
-            float decayFactor = 0.99f; // Decay factor for propagating rewards
+            float decayFactor = 0.95f; // Decay factor for propagating rewards
             float reward = finalReward;
 
             int maxStepsBack = 1000;
