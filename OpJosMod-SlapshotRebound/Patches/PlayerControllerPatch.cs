@@ -22,7 +22,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
     public static class Constants
     {
-        public const int ExpectedFeatures = 38; //needs to match the size of what we store
+        public const int ExpectedFeatures = 44; //needs to match the size of what we store
         public const bool isTraining = true;
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
@@ -279,16 +279,19 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             Vector3 playerLocation = GetPlayerLocation();
             Vector3 targetGoalLocation = GetTargetGoalLocation();
             Vector3 defendingGoalLocation = GetDefendingGoalLocation();
-            Quaternion stickRotation = GetStickRotation();
             Vector3 puckVelocity = GetPuckVelocity();
             Vector3 playerVelocity = GetPlayerVelocity();
 
-            Vector3 stickRotationEuler = stickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
             List<Vector3> teammates = GetTeamMatesLocation();
             List<Vector3> opponents = GetOpponentsLocation();
             List<Vector3> players = GetAllPlayersLocation();
             List<Vector3> teammateVelocities = GetTeamMatesVelocity();
             List<Vector3> opponentVelocities = GetOpponentsVelocity();
+
+            List<PlayerController> teammatesController = GetTeamMates();
+            List<PlayerController> opponentsController = GetOpponents();
+            Quaternion playerStickRotation = GetStickRotation(localPlayer);
+            Vector3 stickRotationEuler = playerStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
 
             // Convert positions to a flat array (excluding Y values)
             List<float> state = new List<float>
@@ -301,22 +304,30 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 playerVelocity.x / 10.0f, playerVelocity.z / 10.0f
             };
 
-            // Add teammate positions and velocities (excluding Y values)
+            // Add teammate positions, stick rotation and velocities (excluding Y values)
             for (int i = 0; i < teammates.Count; i++)
             {
                 state.Add(teammates[i].x / 100.0f);
                 state.Add(teammates[i].z / 100.0f);
                 state.Add(teammateVelocities[i].x / 10.0f);
                 state.Add(teammateVelocities[i].z / 10.0f);
+
+                Quaternion teamateStickRotation = GetStickRotation(teammatesController[i]);
+                Vector3 teamateStickRotationEuler = teamateStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
+                state.Add(teamateStickRotationEuler.y);
             }
 
-            // Add opponent positions and velocities (excluding Y values)
+            // Add opponent positions, stick rotation and velocities (excluding Y values)
             for (int i = 0; i < opponents.Count; i++)
             {
                 state.Add(opponents[i].x / 100.0f);
                 state.Add(opponents[i].z / 100.0f);
                 state.Add(opponentVelocities[i].x / 10.0f);
                 state.Add(opponentVelocities[i].z / 10.0f);
+
+                Quaternion opponentStickRotation = GetStickRotation(opponentsController[i]);
+                Vector3 opponentStickRotationEuler = opponentStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
+                state.Add(opponentStickRotationEuler.y);
             }
 
             // Additional state information
@@ -773,6 +784,20 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             return result;
         }
 
+        private static List<PlayerController> GetTeamMates()
+        {
+            List<PlayerController> result = new List<PlayerController>();
+            foreach (Player player in game.Players.Values)
+            {
+                if (player.Team == GetPlayerTeam())
+                {
+                    result.Add(player.playerController);
+                }
+            }
+
+            return result;
+        }
+
         private static List<Vector3> GetOpponentsLocation()
         {
             List<Vector3> result = new List<Vector3>();
@@ -781,6 +806,20 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (player.Team != GetPlayerTeam())
                 {
                     result.Add(player.playerController.playerRigidbody.transform.position);
+                }
+            }
+
+            return result;
+        }
+
+        private static List<PlayerController> GetOpponents()
+        {
+            List<PlayerController> result = new List<PlayerController>();
+            foreach (Player player in game.Players.Values)
+            {
+                if (player.Team != GetPlayerTeam())
+                {
+                    result.Add(player.playerController);
                 }
             }
 
@@ -798,9 +837,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             return result;
         }
 
-        public static Quaternion GetStickRotation()
+        public static Quaternion GetStickRotation(PlayerController player)
         {
-            return localPlayer.handsRotatorRigidbody.rotation;
+            return player.handsRotatorRigidbody.rotation;
         }
 
         public static bool TeamateHasPuck()
