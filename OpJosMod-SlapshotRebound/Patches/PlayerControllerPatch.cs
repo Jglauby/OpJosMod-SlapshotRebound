@@ -25,10 +25,10 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const bool isTraining = true;
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 20;
-        public const int MinimumExampleCountPerLeaf = 10;
+        public const int NumberOfLeaves = 32;
+        public const int MinimumExampleCountPerLeaf = 5;
         public const int NumberOfTrees = 100;
-        public const double LearningRate = 0.2;
+        public const double LearningRate = 0.05;
     }
 
     public static class GlobalVars
@@ -75,9 +75,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.2f; // Start with a 10% chance of exploration
-        private static float epsilonDecay = 0.995f; // Decay rate to reduce exploration over time
-        private static float minEpsilon = 0.05f; // Minimum exploration probability
+        private static float epsilon = 0.5f; // Start with a 10% chance of exploration
+        private static float epsilonDecay = 0.999f; // Decay rate to reduce exploration over time
+        private static float minEpsilon = 0.1f; // Minimum exploration probability
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
