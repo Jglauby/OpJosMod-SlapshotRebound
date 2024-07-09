@@ -22,13 +22,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
     public static class Constants
     {
-        public const int ExpectedFeatures = 21; //needs to match the size of what we store
+        public const int ExpectedFeatures = 38; //needs to match the size of what we store
         public const bool isTraining = true;
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 32;
+        public const int NumberOfLeaves = 128;
         public const int MinimumExampleCountPerLeaf = 5;
-        public const int NumberOfTrees = 100;
+        public const int NumberOfTrees = 200;
         public const double LearningRate = 0.05;
     }
 
@@ -278,11 +278,17 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             Vector3 puckLocation = GetPuckLocation();
             Vector3 playerLocation = GetPlayerLocation();
             Vector3 targetGoalLocation = GetTargetGoalLocation();
+            Vector3 defendingGoalLocation = GetDefendingGoalLocation();
             Quaternion stickRotation = GetStickRotation();
+            Vector3 puckVelocity = GetPuckVelocity();
+            Vector3 playerVelocity = GetPlayerVelocity();
 
             Vector3 stickRotationEuler = stickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
             List<Vector3> teammates = GetTeamMatesLocation();
             List<Vector3> opponents = GetOpponentsLocation();
+            List<Vector3> players = GetAllPlayersLocation();
+            List<Vector3> teammateVelocities = GetTeamMatesVelocity();
+            List<Vector3> opponentVelocities = GetOpponentsVelocity();
 
             // Convert positions to a flat array (excluding Y values)
             List<float> state = new List<float>
@@ -290,30 +296,44 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 puckLocation.x / 100.0f, puckLocation.z / 100.0f,
                 playerLocation.x / 100.0f, playerLocation.z / 100.0f,
                 targetGoalLocation.x / 100.0f, targetGoalLocation.z / 100.0f,
-                stickRotationEuler.y
+                stickRotationEuler.y,
+                puckVelocity.x / 10.0f, puckVelocity.z / 10.0f, // Normalize velocities
+                playerVelocity.x / 10.0f, playerVelocity.z / 10.0f
             };
 
-            // Add teammate positions (excluding Y values)
-            foreach (var teammate in teammates)
+            // Add teammate positions and velocities (excluding Y values)
+            for (int i = 0; i < teammates.Count; i++)
             {
-                state.Add(teammate.x / 100.0f);
-                state.Add(teammate.z / 100.0f);
+                state.Add(teammates[i].x / 100.0f);
+                state.Add(teammates[i].z / 100.0f);
+                state.Add(teammateVelocities[i].x / 10.0f);
+                state.Add(teammateVelocities[i].z / 10.0f);
             }
 
-            // Add opponent positions (excluding Y values)
-            foreach (var opponent in opponents)
+            // Add opponent positions and velocities (excluding Y values)
+            for (int i = 0; i < opponents.Count; i++)
             {
-                state.Add(opponent.x / 100.0f);
-                state.Add(opponent.z / 100.0f);
+                state.Add(opponents[i].x / 100.0f);
+                state.Add(opponents[i].z / 100.0f);
+                state.Add(opponentVelocities[i].x / 10.0f);
+                state.Add(opponentVelocities[i].z / 10.0f);
             }
 
             // Additional state information
             float distanceFromPuck = GetDistanceFromPuck() / 100.0f; // Assuming max distance can be 100 units
-            float isCloseToPuck = distanceFromPuck < 0.01f ? 1.0f : 0.0f; // Normalized distance check
-            float isAlignedWithGoal = Math.Abs((targetGoalLocation - playerLocation).x) < 1.0f ? 1.0f : 0.0f;
 
-            state.Add(isCloseToPuck);
-            state.Add(isAlignedWithGoal);
+            // Check if there is a clear path to the target goal
+            bool pathToTargetGoal = IsPathClear(playerLocation, targetGoalLocation, players);
+            bool pathToDefendingGoal = IsPathClear(playerLocation, defendingGoalLocation, players);
+
+            // Add these fields to the state
+            float pathToTargetGoalField = pathToTargetGoal ? 1.0f : 0.0f;
+            float pathToDefendingGoalField = pathToDefendingGoal ? 1.0f : 0.0f;
+            state.Add(pathToTargetGoalField);
+            state.Add(pathToDefendingGoalField);
+
+            // Add timestamp or frame count
+            state.Add(Time.time / 1000.0f); // Normalized time
 
             return state.ToArray();
         }
@@ -492,7 +512,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     float distanceToLine = Vector3.Distance(GetPlayerLocation(), projectedPlayerPosition);
 
                     // Define a distance threshold to consider the player as being in the way
-                    float distanceThreshold = 3.0f;
+                    float distanceThreshold = 2.0f;
 
                     // Check if the player is in the way of the shot
                     if (distanceToLine < distanceThreshold)
@@ -828,6 +848,97 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
             return false;
         }
+
+        public static Vector3 GetPuckVelocity()
+        {
+            var puckRigidbody = localPlayer.GetNearestPuck()?.GetComponent<Rigidbody>();
+            return puckRigidbody != null ? puckRigidbody.velocity : Vector3.zero;
+        }
+
+        public static Vector3 GetPlayerVelocity()
+        {
+            var playerRigidbody = localPlayer?.playerRigidbody;
+            return playerRigidbody != null ? playerRigidbody.velocity : Vector3.zero;
+        }
+
+        public static List<Vector3> GetTeamMatesVelocity()
+        {
+            List<Vector3> velocities = new List<Vector3>();
+            foreach (Player player in game.Players.Values)
+            {
+                if (player.Team == GetPlayerTeam())
+                {
+                    velocities.Add(player.playerController.playerRigidbody.velocity);
+                }
+            }
+            return velocities;
+        }
+
+        public static List<Vector3> GetOpponentsVelocity()
+        {
+            List<Vector3> velocities = new List<Vector3>();
+            foreach (Player player in game.Players.Values)
+            {
+                if (player.Team != GetPlayerTeam())
+                {
+                    velocities.Add(player.playerController.playerRigidbody.velocity);
+                }
+            }
+            return velocities;
+        }
+
+        private static bool IsPathClear(Vector3 startPoint, Vector3 endPoint, List<Vector3> players)
+        {
+            Vector3 directionToGoal = (endPoint - startPoint).normalized;
+            float distanceToGoal = Vector3.Distance(startPoint, endPoint);
+
+            foreach (var player in players)
+            {
+                if (IsPlayerBlockingPath(startPoint, endPoint, directionToGoal, player, distanceToGoal))
+                {
+                    //mls.LogMessage("" + $"Player at {player} is blocking the path to the goal.");
+                    return false;
+                }
+            }
+
+            //if local player is in the way
+            if (IsPlayerBlockingPath(startPoint, endPoint, directionToGoal, GetPlayerLocation(), distanceToGoal))
+            {
+                return false;
+            }
+
+            //if behind net there is no path
+            if (Math.Abs(GetPuckLocation().z) > 57)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsPlayerBlockingPath(Vector3 startPoint, Vector3 endPoint, Vector3 directionToGoal, Vector3 playerPosition, float distanceToGoal)
+        {
+            Vector3 projectedPlayerPosition = Vector3.Project(playerPosition - startPoint, directionToGoal) + startPoint;
+            float distanceToLine = Vector3.Distance(playerPosition, projectedPlayerPosition);
+
+            // Define a distance threshold to consider the player as being in the way
+            float distanceThreshold = 3.0f;
+
+            // Check if the player is within the line segment and the distance threshold
+            bool isWithinThreshold = distanceToLine < distanceThreshold;
+            bool isWithinSegment = Vector3.Distance(startPoint, playerPosition) < distanceToGoal && Vector3.Distance(playerPosition, endPoint) < distanceToGoal;
+
+            // Additional debugging information
+            float startToPlayer = Vector3.Distance(startPoint, playerPosition);
+            float playerToEnd = Vector3.Distance(playerPosition, endPoint);
+
+            //mls.LogMessage("" + $"Player Position: {playerPosition}, Projected Position: {projectedPlayerPosition}, Distance to Line: {distanceToLine}, Within Threshold: {isWithinThreshold}, Within Segment: {isWithinSegment}");
+            //mls.LogMessage("" + $"startPoint: {startPoint}, endPoint: {endPoint}, startToPlayer: {startToPlayer}, playerToEnd: {playerToEnd}, distanceToGoal: {distanceToGoal}");
+
+            return isWithinThreshold && isWithinSegment;
+        }
+
+
         #endregion
 
         #region control player
