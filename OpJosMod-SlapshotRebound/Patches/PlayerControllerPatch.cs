@@ -3,6 +3,7 @@ using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using Microsoft.ML.Trainers.FastTree;
 using OpJosModSlapshotRebound.AIPlayer.Patches;
 using System;
 using System.Collections.Generic;
@@ -22,13 +23,18 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     {
         public const int ExpectedFeatures = 21; //needs to match the size of what we store
         public const bool isTraining = true;
-        public const int DataSetSize = 90000;
+        public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
+        public const int NumberOfLeaves = 20;
+        public const int MinimumExampleCountPerLeaf = 10;
+        public const int NumberOfTrees = 100;
+        public const double LearningRate = 0.2;
     }
 
     public static class GlobalVars
     {
         public static string puckLastHitBy = string.Empty;
+        public static int dataCountSinceLastScore = 0;
     }
 
     [HarmonyPatch(typeof(PlayerController))]
@@ -111,6 +117,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 UpdateModel();
                 SaveTrainingData(dataPath, trainingData);
+                unPressAll();
             }
         }
 
@@ -137,8 +144,15 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     var dataView = mlContext.Data.LoadFromEnumerable(initialData);
 
                     var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
-                        .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
-                        .Append(mlContext.Regression.Trainers.Sdca());
+                    .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                    .Append(mlContext.Transforms.NormalizeMinMax("Features"))
+                    .Append(mlContext.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
+                    {
+                        NumberOfLeaves = Constants.NumberOfLeaves,
+                        MinimumExampleCountPerLeaf = Constants.MinimumExampleCountPerLeaf,
+                        NumberOfTrees = Constants.NumberOfTrees,
+                        LearningRate = Constants.LearningRate
+                    }));
 
                     trainedModel = pipeline.Fit(dataView);
                     predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
@@ -198,9 +212,10 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 previousPuckPosition = GetPuckLocation();
                 input.Reward = reward;
 
-                if (reward != 0)
+                if (reward < -0.005 || reward > 0.005)
                 {
                     trainingData.Add(new AISequence { Inputs = new List<AIInput>(currentSequence) });
+                    GlobalVars.dataCountSinceLastScore++;
                     currentSequence.Clear();
 
                     if (trainingData.Count >= Constants.DataSetSize)
@@ -304,7 +319,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void PerformAction(string action)
         {
-            //mls.LogInfo("performing action: " + action);
+            //mls.LogMessage("performing action: " + action);
             switch (action)
             {
                 case "do_nothing":
@@ -483,6 +498,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             {
                 float distanceToPuck = Vector3.Distance(GetPuckLocation(), GetPlayerLocation());
                 float targetReward = 5 / Math.Max(1, distanceToPuck);
+                reward += targetReward;
             }
 
             reward += nextReward;
@@ -510,11 +526,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             if (finalReward < 0.05)
                 return;
 
-            float decayFactor = 0.95f; // Decay factor for propagating rewards
+            float decayFactor = 0.995f; // Decay factor for propagating rewards
             float reward = finalReward;
 
-            int maxStepsBack = 1000;
+            int maxStepsBack = GlobalVars.dataCountSinceLastScore;
             int steps = 0;
+            //mls.LogMessage("propegated " +  maxStepsBack);
 
             for (int i = currentSequence.Count - 1; i >= 0; i--)
             {
@@ -549,9 +566,16 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 }
 
                 var dataView = mlContext.Data.LoadFromEnumerable(flattenedData);
-                var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(FlattenedAIInput.Reward))
-                    .Append(mlContext.Transforms.Concatenate("Features", nameof(FlattenedAIInput.Features)))
-                    .Append(mlContext.Regression.Trainers.Sdca());
+                var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
+                .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                .Append(mlContext.Transforms.NormalizeMinMax("Features"))
+                .Append(mlContext.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
+                {
+                    NumberOfLeaves = Constants.NumberOfLeaves,
+                    MinimumExampleCountPerLeaf = Constants.MinimumExampleCountPerLeaf,
+                    NumberOfTrees = Constants.NumberOfTrees,
+                    LearningRate = Constants.LearningRate
+                }));
 
                 trainedModel = pipeline.Fit(dataView);
                 predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
@@ -898,6 +922,16 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 }
             });
         }
+
+        private static void unPressAll()
+        {
+            inputSimulator.Mouse.LeftButtonUp();
+            inputSimulator.Keyboard.KeyUp(breakKey);
+            inputSimulator.Keyboard.KeyUp(rightKey);
+            inputSimulator.Keyboard.KeyUp(leftKey);
+            inputSimulator.Keyboard.KeyUp(backwardKey);
+            inputSimulator.Keyboard.KeyUp(forwardKey);
+        }
         #endregion
     }
 
@@ -909,6 +943,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         [HarmonyPostfix]
         private static void OnGoalScoredPatch(ref GoalScoredPacket goalScored)
         {
+            GlobalVars.dataCountSinceLastScore = 0;
             if (goalScored.Team == PlayerControllerPatch.GetPlayerTeam())
             {
                 PlayerControllerPatch.nextReward = 100f;
