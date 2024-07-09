@@ -22,7 +22,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
     public static class Constants
     {
-        public const int ExpectedFeatures = 44; //needs to match the size of what we store
+        public const int ExpectedFeatures = 50; //needs to match the size of what we store
         public const bool isTraining = true;
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
@@ -329,6 +329,14 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 Vector3 opponentStickRotationEuler = opponentStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
                 state.Add(opponentStickRotationEuler.y);
             }
+
+            //Add what buttons are currently held down
+            state.Add(IsButtonHeld(forwardKey) ? 1.0f : 0.0f);
+            state.Add(IsButtonHeld(backwardKey) ? 1.0f : 0.0f);
+            state.Add(IsButtonHeld(leftKey) ? 1.0f : 0.0f);
+            state.Add(IsButtonHeld(rightKey) ? 1.0f : 0.0f);
+            state.Add(IsButtonHeld(breakKey) ? 1.0f : 0.0f);
+            state.Add(IsLeftMouseButtonHeld() ? 1.0f : 0.0f);
 
             // Additional state information
             float distanceFromPuck = GetDistanceFromPuck() / 100.0f; // Assuming max distance can be 100 units
@@ -977,7 +985,15 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             return isWithinThreshold && isWithinSegment;
         }
 
+        private static bool IsButtonHeld(VirtualKeyCode keyCode)
+        {
+            return inputSimulator.InputDeviceState.IsKeyDown(keyCode);
+        }
 
+        private static bool IsLeftMouseButtonHeld()
+        {
+            return inputSimulator.InputDeviceState.IsKeyDown(VirtualKeyCode.LBUTTON);
+        }
         #endregion
 
         #region control player
