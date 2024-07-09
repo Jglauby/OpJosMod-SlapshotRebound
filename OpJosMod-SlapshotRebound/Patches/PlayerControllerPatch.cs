@@ -415,7 +415,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             float reward = 0f;
 
             //dont point reward at all when puck or player behind goal
-            if (Math.Abs(GetPuckLocation().z) > 57 || Math.Abs(GetPlayerLocation().x) > 57)
+            if (Math.Abs(GetPuckLocation().z) > 57 || Math.Abs(GetPlayerLocation().z) > 57)
                 return 0f;
 
             //if hit puck away
@@ -963,7 +963,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static void UpdatePatch(Game __instance)
         {
             if (Constants.isTraining)
-                __instance.MatchTimer = 500;
+                __instance.MatchTimer = Time.time;
         }
     }
 
