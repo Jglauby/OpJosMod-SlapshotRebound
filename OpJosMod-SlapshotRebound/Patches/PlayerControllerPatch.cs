@@ -26,7 +26,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const bool isTraining = true;
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 128;
+        public const int NumberOfLeaves = 256;
         public const int MinimumExampleCountPerLeaf = 5;
         public const int NumberOfTrees = 200;
         public const double LearningRate = 0.05;
@@ -76,9 +76,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.5f; // Start with a 10% chance of exploration
+        private static float epsilon = 0.6f; //with no data start at 0.6 -> 60%
         private static float epsilonDecay = 0.999f; // Decay rate to reduce exploration over time
-        private static float minEpsilon = 0.1f; // Minimum exploration probability
+        private static float minEpsilon = 0.07f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -512,7 +512,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     float distanceToLine = Vector3.Distance(GetPlayerLocation(), projectedPlayerPosition);
 
                     // Define a distance threshold to consider the player as being in the way
-                    float distanceThreshold = 2.0f;
+                    float distanceThreshold = 1.5f;
 
                     // Check if the player is in the way of the shot
                     if (distanceToLine < distanceThreshold)
@@ -922,7 +922,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             float distanceToLine = Vector3.Distance(playerPosition, projectedPlayerPosition);
 
             // Define a distance threshold to consider the player as being in the way
-            float distanceThreshold = 3.0f;
+            float distanceThreshold = 1.5f;
 
             // Check if the player is within the line segment and the distance threshold
             bool isWithinThreshold = distanceToLine < distanceThreshold;
@@ -1056,6 +1056,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     [HarmonyPatch(typeof(Game))]
     internal class GamePatch
     {
+        public static ManualLogSource mls;
+        public static void SetLogSource(ManualLogSource source)
+        {
+            mls = source;
+        }
+
         [HarmonyPatch("OnGoalScored")]
         [HarmonyPostfix]
         private static void OnGoalScoredPatch(ref GoalScoredPacket goalScored)
@@ -1063,15 +1069,23 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             GlobalVars.dataCountSinceLastScore = 0;
             if (goalScored.Team == PlayerControllerPatch.GetPlayerTeam())
             {
-                PlayerControllerPatch.nextReward = 100f;
+                //PlayerControllerPatch.nextReward = 100f;
                 if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
                 {
+                    mls.LogMessage("You scored!");
                     PlayerControllerPatch.nextReward += 2000f;
                 }
             }
             else
             {
-                PlayerControllerPatch.nextReward = -100f;
+                //PlayerControllerPatch.nextReward = -100f;
+
+                //if you scord on yourself
+                if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
+                {
+                    mls.LogMessage("You own goaled :(");
+                    PlayerControllerPatch.nextReward -= 200f;
+                }
             }
         }
 
@@ -1105,6 +1119,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 {
                     //mls.LogMessage("Player hit puck: " + playerController.Username);
                     GlobalVars.puckLastHitBy = playerController.Username;
+
+                    //give reward for touching puck with stick
+                    if (playerController.Username == PlayerControllerPatch.localPlayer.player.Username)
+                    {
+                        PlayerControllerPatch.nextReward = 15;
+                    }
                 }
                 else
                 {
