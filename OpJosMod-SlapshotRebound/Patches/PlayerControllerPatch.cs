@@ -1,4 +1,5 @@
-﻿using BepInEx.Logging;
+﻿using Anzu.Examples;
+using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP.UnityEngine;
 using HarmonyLib;
 using Microsoft.ML;
@@ -450,7 +451,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     Vector3 directionToPuck = GetPuckLocation() - GetPlayerLocation();
 
                     float angle = Vector3.Angle(directionToGoal, directionToPuck);
-                    if (angle > 30.0f) // Not in direct line (angle greater than 30 degrees)
+                    if (angle > 15.0f) // Not in direct line (angle greater than 30 degrees)
                     {
                         //reward based on closeness to cetner of field
                         float proximityToCenter = 1 / (Mathf.Abs(GetPlayerLocation().x) + 1);
@@ -477,29 +478,34 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
             else if (OpponentHasPuck())
             {
-                if (Vector3.Distance(GetPlayerLocation(), GetDefendingGoalLocation()) < Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation())) // player closer to goal than the puck is
+                float playerDistanceToGoal = Vector3.Distance(GetPlayerLocation(), GetDefendingGoalLocation());
+                float puckDistanceToGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
+
+                if (playerDistanceToGoal < puckDistanceToGoal)
                 {
-                    Vector3 directionToGoal = GetDefendingGoalLocation() - GetPlayerLocation();
-                    Vector3 directionToPuck = GetPuckLocation() - GetPlayerLocation();
+                    Vector3 directionPuckToGoal = (GetDefendingGoalLocation() - GetPuckLocation()).normalized;
+                    Vector3 directionPlayerToGoal = (GetDefendingGoalLocation() - GetPlayerLocation()).normalized;
+                    Vector3 directionPlayerToPuck = (GetDefendingGoalLocation() - GetPlayerLocation()).normalized;
 
-                    // Reward based on how "in the way" the player is
-                    float angle = Vector3.Angle(directionToGoal, directionToPuck);
-                    float angleReward = Mathf.Cos(angle * Mathf.Deg2Rad);
+                    // Project the player's position onto the line from puck to goal
+                    Vector3 projectedPlayerPosition = Vector3.Project(GetPlayerLocation() - GetPuckLocation(), directionPuckToGoal) + GetPuckLocation();
+                    float distanceToLine = Vector3.Distance(GetPlayerLocation(), projectedPlayerPosition);
 
-                    float baseReward = 20.0f * angleReward;
+                    // Define a distance threshold to consider the player as being in the way
+                    float distanceThreshold = 3.0f;
 
-                    if (angle < 10)
-                        reward += baseReward;
+                    // Check if the player is in the way of the shot
+                    if (distanceToLine < distanceThreshold)
+                    {
+                        //mls.LogMessage("Player is in the way of the shot");
+                        reward += 5;
+                    }
                 }
             }
 
-            //reward if close to puck
-            if (Vector3.Distance(GetPuckLocation(), GetPlayerLocation()) < 10)
-            {
-                float distanceToPuck = Vector3.Distance(GetPuckLocation(), GetPlayerLocation());
-                float targetReward = 5 / Math.Max(1, distanceToPuck);
-                reward += targetReward;
-            }
+            //reward for distance from puck
+            if (GetDistanceFromPuck() < 15)
+                reward += 5 / Math.Max(1, GetDistanceFromPuck());
 
             reward += nextReward;
 
