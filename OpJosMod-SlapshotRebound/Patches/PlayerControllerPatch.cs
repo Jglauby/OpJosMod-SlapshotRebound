@@ -76,8 +76,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.6f; //with no data start at 0.6 -> 60%
-        private static float epsilonDecay = 0.999f; // Decay rate to reduce exploration over time
+        private static float epsilon = 0.65f; //with no data start at 0.6 -> 60%
+        private static float epsilonDecay = 0.999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours
         private static float minEpsilon = 0.07f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
         [HarmonyPatch("Update")]
@@ -255,14 +255,6 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 "move_east_release",
                 "move_west_press",
                 "move_west_release",
-                "move_northeast_press",
-                "move_northeast_release",
-                "move_northwest_press",
-                "move_northwest_release",
-                "move_southeast_press",
-                "move_southeast_release",
-                "move_southwest_press",
-                "move_southwest_release",
                 "lift_stick", 
                 "lower_stick", 
                 "spin_clockwise", 
@@ -393,39 +385,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     break;
                 case "move_west_release":
                     MoveLeftRelease();
-                    break;
-                case "move_northeast_press":
-                    MoveRightPress();
-                    MoveForwardPress();
-                    break;
-                case "move_northeast_release":
-                    MoveRightRelease();
-                    MoveForwardRelease();
-                    break;
-                case "move_northwest_press":
-                    MoveForwardPress();
-                    MoveLeftPress();
-                    break;
-                case "move_northwest_release":
-                    MoveForwardRelease();
-                    MoveLeftRelease();
-                    break;
-                case "move_southeast_press":
-                    MoveBackwardPress();
-                    MoveRightPress();
-                    break;
-                case "move_southeast_release":
-                    MoveBackwardRelease();
-                    MoveRightRelease();
-                    break;
-                case "move_southwest_press":
-                    MoveBackwardPress();
-                    MoveLeftPress();
-                    break;
-                case "move_southwest_release":
-                    MoveBackwardRelease();
-                    MoveLeftRelease();
-                    break;
+                    break;               
                 case "lift_stick":
                     pickStickUp();
                     break;
@@ -465,20 +425,20 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 50 / distanceToTargetGoal;
+                    float targetGoalReward = 200 / distanceToTargetGoal;
                     reward += targetGoalReward;
 
-                    reward += 5 / (GetPuckLocation().x + 1);
+                    reward += 15 / (GetPuckLocation().x + 1);
                 }
 
                 //now closer to own goal
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 50 / distanceToTargetGoal;
-                    reward -= penalty * 2;
+                    float penalty = 200 / distanceToTargetGoal;
+                    reward -= penalty;
 
-                    reward -= 5 / (GetPuckLocation().x + 1);
+                    reward -= 15 / (GetPuckLocation().x + 1);
                 }
             }
 
@@ -543,8 +503,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
 
             //reward for distance from puck
-            if (GetDistanceFromPuck() < 15)
-                reward += 5 / Math.Max(1, GetDistanceFromPuck());
+            if (GetDistanceFromPuck() < 25)
+                reward += 25 / Math.Max(1, GetDistanceFromPuck());
 
             reward += nextReward;
 
@@ -1139,7 +1099,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
                 {
                     mls.LogMessage("You own goaled :(");
-                    PlayerControllerPatch.nextReward -= 200f;
+                    PlayerControllerPatch.nextReward -= 2000f;
                 }
             }
         }
@@ -1178,7 +1138,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     //give reward for touching puck with stick
                     if (playerController.Username == PlayerControllerPatch.localPlayer.player.Username)
                     {
-                        PlayerControllerPatch.nextReward = 15;
+                        PlayerControllerPatch.nextReward = 25;
                     }
                 }
                 else
