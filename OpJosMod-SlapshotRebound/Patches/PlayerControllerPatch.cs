@@ -26,9 +26,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const bool isTraining = true;
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 256;
-        public const int MinimumExampleCountPerLeaf = 5;
-        public const int NumberOfTrees = 200;
+        public const int NumberOfLeaves = 1024;
+        public const int MinimumExampleCountPerLeaf = 3;
+        public const int NumberOfTrees = 1000;
         public const double LearningRate = 0.05;
     }
 
@@ -76,9 +76,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.65f; //with no data start at 0.6 -> 60%
+        private static float epsilon = 0.55f; //with no data start at 0.6 -> 60%
         private static float epsilonDecay = 0.999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours
-        private static float minEpsilon = 0.07f; // Minimum exploration probability, with no data set to 0.1 -> 10%
+        private static float minEpsilon = 0.9f; // Minimum exploration probability, with no data set to 0.1 -> 10%
+
+        private static int updatedModelTimes = 0;
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -224,7 +226,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         UpdateModel();
                         SaveTrainingData(dataPath, trainingData);
 
-                        trainingData.RemoveRange(0, trainingData.Count / 2);
+                        trainingData.RemoveRange(0, trainingData.Count / 10);
                     }
 
                     if (epsilon > minEpsilon)
@@ -414,9 +416,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = 0f;
 
-            //dont point reward at all when puck or player behind goal
-            if (Math.Abs(GetPuckLocation().z) > 57 || Math.Abs(GetPlayerLocation().z) > 57)
-                return 0f;
+            //when puck or player behind net
+            //if (Math.Abs(GetPuckLocation().z) > 57 || Math.Abs(GetPlayerLocation().z) > 57)
+            //    return 0f;
 
             //if hit puck away
             if (GlobalVars.puckLastHitBy == localPlayer.player.Username)
@@ -425,7 +427,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 200 / distanceToTargetGoal;
+                    float targetGoalReward = 250 / distanceToTargetGoal;
                     reward += targetGoalReward;
 
                     reward += 15 / (GetPuckLocation().x + 1);
@@ -435,7 +437,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
                 {
                     float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 200 / distanceToTargetGoal;
+                    float penalty = 250 / distanceToTargetGoal;
                     reward -= penalty;
 
                     reward -= 15 / (GetPuckLocation().x + 1);
@@ -503,24 +505,25 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             }
 
             //reward for distance from puck
-            if (GetDistanceFromPuck() < 25)
-                reward += 25 / Math.Max(1, GetDistanceFromPuck());
+            if (GetDistanceFromPuck() < 200)
+            {
+                float distance = 1f / Math.Max(1, GetDistanceFromPuck()/1.5f);
+                reward += Math.Min(10, 100 * distance);
+            }
 
             reward += nextReward;
 
             // Encourage exploration with a small random factor
-            if (reward > 0.09)
+            if (reward > 0.04 || reward < -0.04)
                 reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
             PropagateRewards(reward);
 
-            if (reward != 0)
-            {
-                if (reward > 0)
-                    mls.LogWarning("Positive Feedback: " + reward);
-                else
-                    mls.LogInfo("Negative Feedback: " + reward);
-            }
+            var afterMessage = $"| {Constants.DataSetSize - trainingData.Count} reamaing till update model. | Updated Model {updatedModelTimes} times";
+            if (reward > 0)
+                mls.LogWarning("Positive Feedback: " + reward + afterMessage);
+            else if (reward < 0)
+                mls.LogInfo("Negative Feedback: " + reward + afterMessage);
 
             nextReward = 0;
             return reward;
@@ -528,10 +531,10 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void PropagateRewards(float finalReward)
         {
-            if (finalReward < 0.05)
+            if (finalReward < 0.05 && finalReward > -0.05)
                 return;
 
-            float decayFactor = 0.995f; // Decay factor for propagating rewards
+            float decayFactor = 0.95f; // Decay factor for propagating rewards
             float reward = finalReward;
 
             int maxStepsBack = GlobalVars.dataCountSinceLastScore;
@@ -589,6 +592,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 mls.LogWarning("Saving the model to " + modelPath);
                 mlContext.Model.Save(trainedModel, dataView.Schema, modelPath);
                 mls.LogWarning("Model saved successfully.");
+                updatedModelTimes++;
             }
             catch (Exception ex)
             {
@@ -1019,13 +1023,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void spinClockwise()
         {
-            int moveDistance = 100;
+            int moveDistance = 50;
             inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
         }
 
         private static void spinCounterClockwise()
         {
-            int moveDistance = -100;
+            int moveDistance = -50;
             inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
         }
 
@@ -1033,8 +1037,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             Task.Run(() =>
             {
-                int moveDistance = 500;
-                for (int i = 0; i < 1000; i++)
+                int moveDistance = 100;
+                for (int i = 0; i < 100; i++)
                 {
                     Task.Delay(1);
                     inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
@@ -1046,8 +1050,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             Task.Run(() =>
             {
-                int moveDistance = -500;
-                for (int i = 0; i < 1000; i++)
+                int moveDistance = -100;
+                for (int i = 0; i < 100; i++)
                 {
                     Task.Delay(1);
                     inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
@@ -1094,9 +1098,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             else
             {
                 //PlayerControllerPatch.nextReward = -100f;
-
                 //if you scord on yourself
-                if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
+                if (GlobalVars.puckLastHitBy == PlayerControllerPatch.localPlayer?.player.Username)
                 {
                     mls.LogMessage("You own goaled :(");
                     PlayerControllerPatch.nextReward -= 2000f;
@@ -1138,7 +1141,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     //give reward for touching puck with stick
                     if (playerController.Username == PlayerControllerPatch.localPlayer.player.Username)
                     {
-                        PlayerControllerPatch.nextReward = 25;
+                        PlayerControllerPatch.nextReward = 35;
                     }
                 }
                 else
