@@ -5,6 +5,7 @@ using HarmonyLib;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using Microsoft.ML.Trainers.FastTree;
+using Microsoft.ML.Trainers.LightGbm;
 using OpJosModSlapshotRebound.AIPlayer.Patches;
 using System;
 using System.Collections.Generic;
@@ -23,7 +24,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     public static class Constants
     {
         public const int ExpectedFeatures = 50; //needs to match the size of what we store
-        public const bool isTraining = true;
+        public const bool isTraining = true; //if set to false only update model when game is over
         public const int DataSetSize = 1000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
         public const int NumberOfLeaves = 1024;
@@ -149,11 +150,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
                     .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
                     .Append(mlContext.Transforms.NormalizeMinMax("Features"))
-                    .Append(mlContext.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
+                    .Append(mlContext.Regression.Trainers.LightGbm(new LightGbmRegressionTrainer.Options
                     {
                         NumberOfLeaves = Constants.NumberOfLeaves,
                         MinimumExampleCountPerLeaf = Constants.MinimumExampleCountPerLeaf,
-                        NumberOfTrees = Constants.NumberOfTrees,
+                        NumberOfIterations = Constants.NumberOfTrees,
                         LearningRate = Constants.LearningRate
                     }));
 
@@ -577,11 +578,11 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
                 .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
                 .Append(mlContext.Transforms.NormalizeMinMax("Features"))
-                .Append(mlContext.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
+                .Append(mlContext.Regression.Trainers.LightGbm(new LightGbmRegressionTrainer.Options
                 {
                     NumberOfLeaves = Constants.NumberOfLeaves,
                     MinimumExampleCountPerLeaf = Constants.MinimumExampleCountPerLeaf,
-                    NumberOfTrees = Constants.NumberOfTrees,
+                    NumberOfIterations = Constants.NumberOfTrees,
                     LearningRate = Constants.LearningRate
                 }));
 
