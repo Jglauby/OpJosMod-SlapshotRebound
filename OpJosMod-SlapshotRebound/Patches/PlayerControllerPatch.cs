@@ -25,12 +25,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     {
         public const int ExpectedFeatures = 50; //needs to match the size of what we store
         public const bool isTraining = true; //if set to false only update model when game is over
-        public const int DataSetSize = 1000000;
+        public const int DataSetSize = 5000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 1024;
-        public const int MinimumExampleCountPerLeaf = 3;
-        public const int NumberOfTrees = 1000;
-        public const double LearningRate = 0.05;
+        public const int NumberOfLeaves = 2048;
+        public const int MinimumExampleCountPerLeaf = 10;
+        public const int NumberOfTrees = 2000;
+        public const double LearningRate = 0.01;
     }
 
     public static class GlobalVars
@@ -431,7 +431,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     float targetGoalReward = 250 / distanceToTargetGoal;
                     reward += targetGoalReward;
 
-                    reward += 15 / (GetPuckLocation().x + 1);
+                    reward += 20 / (GetPuckLocation().x + 1);
                 }
 
                 //now closer to own goal
@@ -441,7 +441,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     float penalty = 250 / distanceToTargetGoal;
                     reward -= penalty;
 
-                    reward -= 15 / (GetPuckLocation().x + 1);
+                    reward -= 20 / (GetPuckLocation().x + 1);
                 }
             }
 
@@ -457,7 +457,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     {
                         //reward based on closeness to cetner of field
                         float proximityToCenter = 1 / (Mathf.Abs(GetPlayerLocation().x) + 1);
-                        float baseReward = 10.0f * proximityToCenter;
+                        float baseReward = 15.0f * proximityToCenter;
                         reward += baseReward;
 
                         //give more reward if far from other players
@@ -500,7 +500,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     if (distanceToLine < distanceThreshold)
                     {
                         //mls.LogMessage("Player is in the way of the shot");
-                        reward += 5;
+                        reward += 15;
                     }
                 }
             }
@@ -1024,13 +1024,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static void spinClockwise()
         {
-            int moveDistance = 50;
+            int moveDistance = 25;
             inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
         }
 
         private static void spinCounterClockwise()
         {
-            int moveDistance = -50;
+            int moveDistance = -25;
             inputSimulator.Mouse.MoveMouseBy(moveDistance, 0);
         }
 
@@ -1113,7 +1113,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static void UpdatePatch(Game __instance)
         {
             if (Constants.isTraining)
-                __instance.MatchTimer = Time.time;
+                __instance.MatchTimer = Time.time / 60;
         }
     }
 
@@ -1142,7 +1142,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     //give reward for touching puck with stick
                     if (playerController.Username == PlayerControllerPatch.localPlayer.player.Username)
                     {
-                        PlayerControllerPatch.nextReward = 35;
+                        PlayerControllerPatch.nextReward = 50;
                     }
                 }
                 else
