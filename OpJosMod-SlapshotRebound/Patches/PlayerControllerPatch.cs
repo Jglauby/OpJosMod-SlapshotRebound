@@ -28,7 +28,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const int DataSetSize = 5000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
         public const int NumberOfLeaves = 2048;
-        public const int MinimumExampleCountPerLeaf = 10;
+        public const int MinimumExampleCountPerLeaf = 3;
         public const int NumberOfTrees = 2000;
         public const double LearningRate = 0.01;
     }
@@ -79,7 +79,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static Random random = new Random();
         private static float epsilon = 0.55f; //with no data start at 0.6 -> 60%
         private static float epsilonDecay = 0.999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours
-        private static float minEpsilon = 0.9f; // Minimum exploration probability, with no data set to 0.1 -> 10%
+        private static float minEpsilon = 0.05f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
         private static int updatedModelTimes = 0;
 
