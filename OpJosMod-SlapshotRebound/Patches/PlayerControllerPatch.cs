@@ -27,10 +27,10 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const bool isTraining = true; //if set to false only update model when game is over
         public const int DataSetSize = 5000000;
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 2048;
-        public const int MinimumExampleCountPerLeaf = 3;
-        public const int NumberOfTrees = 2000;
-        public const double LearningRate = 0.01;
+        public const int NumberOfLeaves = 1024;
+        public const int MinimumExampleCountPerLeaf = 10;
+        public const int NumberOfTrees = 1500;
+        public const double LearningRate = 0.02;
     }
 
     public static class GlobalVars
@@ -77,8 +77,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.55f; //with no data start at 0.6 -> 60%
-        private static float epsilonDecay = 0.999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours
+        private static float epsilon = 0.65f; //with no data start at 0.6 -> 60%
+        private static float epsilonDecay = 0.9999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours
         private static float minEpsilon = 0.05f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
         private static int updatedModelTimes = 0;
@@ -208,6 +208,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     // Exploitation: use the model to predict the best action
                     AIOutput prediction = predictionEngine.Predict(input);
                     action = prediction?.Action ?? "do_nothing";
+                    mls.LogMessage("Couldn't Predict what to do");
                 }
 
                 PerformAction(action);
@@ -358,6 +359,14 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             switch (action)
             {
                 case "do_nothing":
+                    break;
+                case "unpress_all":
+                    BreakRelease();
+                    MoveForwardRelease();
+                    MoveBackwardRelease();
+                    MoveLeftRelease();
+                    MoveRightRelease();
+                    putStickDown();
                     break;
                 case "stop_move_press":
                     BreakPress();
