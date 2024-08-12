@@ -524,8 +524,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             reward += nextReward;
 
             // Encourage exploration with a small random factor
-            if (reward > 0.04 || reward < -0.04)
-                reward += UnityEngine.Random.Range(-0.05f, 0.05f);
+            //if (reward > 0.04 || reward < -0.04)
+            //    reward += UnityEngine.Random.Range(-0.05f, 0.05f);
 
             PropagateRewards(reward);
 
