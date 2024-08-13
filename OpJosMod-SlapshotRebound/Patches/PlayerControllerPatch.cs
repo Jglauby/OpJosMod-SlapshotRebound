@@ -25,7 +25,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     {
         public const int ExpectedFeatures = 50; //needs to match the size of what we store
         public const bool isTraining = true; //if set to false only update model when game is over
-        public const int DataSetSize = 5000000;
+        public const int DataSetSize = 50000; //(5000000)
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
         public const int NumberOfLeaves = 1024;
         public const int MinimumExampleCountPerLeaf = 10;
@@ -78,7 +78,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static Random random = new Random();
         private static float epsilon = 0.65f; //with no data start at 0.6 -> 60%
-        private static float epsilonDecay = 0.9999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours
+        private static float epsilonDecay = 0.999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours, (0.999992f)
         private static float minEpsilon = 0.05f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
         private static int updatedModelTimes = 0;
@@ -570,7 +570,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             try
             {
-                var flattenedData = FlattenTrainingData(trainingData);
+                var flattenedData = FlattenAndNormalizeTrainingData(trainingData);
 
                 // Check the dimensions of the feature vectors
                 int expectedDimension = Constants.ExpectedFeatures; // The expected number of features
@@ -687,7 +687,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             return data;
         }
 
-        private static List<FlattenedAIInput> FlattenTrainingData(List<AISequence> sequences)
+        private static List<FlattenedAIInput> FlattenAndNormalizeTrainingData(List<AISequence> sequences)
         {
             var flattenedData = new List<FlattenedAIInput>();
             foreach (var sequence in sequences)
@@ -699,10 +699,23 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         mls.LogError("" + $"Feature vector dimension mismatch in FlattenTrainingData. Expected: {Constants.ExpectedFeatures}, Actual: {input.Features.Length}");
                         continue; // Skip this entry to prevent dimensionality issues
                     }
-                    flattenedData.Add(new FlattenedAIInput { Features = input.Features, Reward = input.Reward });
+
+                    var normalizedFeatures = NormalizeFeatures(input.Features);
+                    flattenedData.Add(new FlattenedAIInput { Features = normalizedFeatures, Reward = input.Reward });
                 }
             }
             return flattenedData;
+        }
+
+        private static float[] NormalizeFeatures(float[] features)
+        {
+            float min = features.Min();
+            float max = features.Max();
+            if (min == max)
+            {
+                return features.Select(f => 0f).ToArray();
+            }
+            return features.Select(f => (f - min) / (max - min)).ToArray();
         }
 
         #region get information
