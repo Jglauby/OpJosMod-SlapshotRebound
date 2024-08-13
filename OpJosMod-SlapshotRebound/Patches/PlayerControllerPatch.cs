@@ -25,13 +25,14 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
     {
         public const int ExpectedFeatures = 50; //needs to match the size of what we store
         public const bool isTraining = true; //if set to false only update model when game is over
-        public const int DataSetSize = 50000; //(5000000)
+        public const int DataSetSize = 10000; //(5000000)
+        public const int CutDataAmount = 2; //10 -> cuts data by 10 after updating model, divides by 10
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 1024;
-        public const int MinimumExampleCountPerLeaf = 10;
-        public const int NumberOfTrees = 1500;
+        public const int NumberOfLeaves = 256; //1024
+        public const int MinimumExampleCountPerLeaf = 5; //10
+        public const int NumberOfTrees = 500; //1500
         public const double LearningRate = 0.02;
-        public const DebugMode DebuggingMode = DebugMode.MovmentsTaken;
+        public const DebugMode DebuggingMode = DebugMode.PointsRewarded;
     }
 
     public enum DebugMode
@@ -80,11 +81,12 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static readonly string modelPath = Path.Combine(pluginDirectory, "MLModel.zip");
         private static readonly string dataPath = Path.Combine(pluginDirectory, "trainingData.csv");
 
+        private static Vector3 previousPlayerPostion = Vector3.zero;
         private static Vector3 previousPuckPosition = Vector3.zero;
         public static float nextReward = 0f;
 
         private static Random random = new Random();
-        private static float epsilon = 0.65f; //with no data start at 0.6 -> 60%
+        private static float epsilon = 0.85f; //with no data start at 0.6 -> 60%
         private static float epsilonDecay = 0.999992f; // Decay rate to reduce exploration over time, should take aroud 4 hours, (0.999992f)
         private static float minEpsilon = 0.05f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
@@ -233,6 +235,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                 float reward = GetReward();
                 previousPuckPosition = GetPuckLocation();
+                previousPlayerPostion = GetPlayerLocation();
                 input.Reward = reward;
 
                 if (reward < -0.005 || reward > 0.005)
@@ -246,7 +249,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                         UpdateModel();
                         SaveTrainingData(dataPath, trainingData);
 
-                        trainingData.RemoveRange(0, trainingData.Count / 10);
+                        trainingData.RemoveRange(0, trainingData.Count / Constants.CutDataAmount);
                     }
 
                     if (epsilon > minEpsilon)
@@ -532,8 +535,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 }
             }
 
-            //reward for distance from puck
-            if (GetDistanceFromPuck() < 200)
+            //reward for moving closer to puck
+            if (GetDistanceFromPuck() - Vector3.Distance(previousPlayerPostion, GetPuckLocation()) > 0 && GetDistanceFromPuck() < 200)
             {
                 float distance = 1f / Math.Max(1, GetDistanceFromPuck()/1.5f);
                 reward += Math.Min(10, 100 * distance);
