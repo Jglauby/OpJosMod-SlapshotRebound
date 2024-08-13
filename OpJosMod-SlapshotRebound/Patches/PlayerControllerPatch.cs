@@ -204,6 +204,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 currentSequence.Add(input);
 
                 string action;
+                var afterMessage = $"| {Constants.DataSetSize - trainingData.Count} reamaing till update model. | Updated Model {updatedModelTimes} times";
 
                 if (random.NextDouble() < epsilon)
                 {
@@ -211,7 +212,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     action = GetRandomAction();
 
                     if (Constants.DebuggingMode == DebugMode.MovmentsTaken)
-                        mls.LogDebug("" + $"{action} | Randomly Selected Movment");
+                        mls.LogInfo("" + $"{action} | Randomly Selected Movment {afterMessage}");
                 }
                 else
                 {
@@ -221,10 +222,10 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                     if (Constants.DebuggingMode == DebugMode.MovmentsTaken)
                     {
-                        if (prediction?.Action == null)                  
-                            mls.LogMessage("do_nothing | Couldn't Predict what to do");                     
+                        if (prediction?.Action == null)
+                            mls.LogMessage("do_nothing | Couldn't Predict what to do " + afterMessage);
                         else
-                            mls.LogError( "" + $"{action} | Predicted Movment");
+                            mls.LogWarning("" + $"{action} | Predicted Movment {afterMessage}");
                     }
                 }
 
