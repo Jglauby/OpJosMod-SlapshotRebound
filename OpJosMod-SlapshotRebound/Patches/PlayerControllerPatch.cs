@@ -31,6 +31,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         public const int MinimumExampleCountPerLeaf = 10;
         public const int NumberOfTrees = 1500;
         public const double LearningRate = 0.02;
+        public const DebugMode DebuggingMode = DebugMode.MovmentsTaken;
+    }
+
+    public enum DebugMode
+    {
+        PointsRewarded = 0,
+        MovmentsTaken = 1
     }
 
     public static class GlobalVars
@@ -202,13 +209,23 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 {
                     // Exploration: take a random action
                     action = GetRandomAction();
+
+                    if (Constants.DebuggingMode == DebugMode.MovmentsTaken)
+                        mls.LogDebug("" + $"{action} | Randomly Selected Movment");
                 }
                 else
                 {
                     // Exploitation: use the model to predict the best action
                     AIOutput prediction = predictionEngine.Predict(input);
                     action = prediction?.Action ?? "do_nothing";
-                    mls.LogMessage("Couldn't Predict what to do");
+
+                    if (Constants.DebuggingMode == DebugMode.MovmentsTaken)
+                    {
+                        if (prediction?.Action == null)                  
+                            mls.LogMessage("do_nothing | Couldn't Predict what to do");                     
+                        else
+                            mls.LogError( "" + $"{action} | Predicted Movment");
+                    }
                 }
 
                 PerformAction(action);
@@ -530,10 +547,13 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             PropagateRewards(reward);
 
             var afterMessage = $"| {Constants.DataSetSize - trainingData.Count} reamaing till update model. | Updated Model {updatedModelTimes} times";
-            if (reward > 0)
-                mls.LogWarning("Positive Feedback: " + reward + afterMessage);
-            else if (reward < 0)
-                mls.LogInfo("Negative Feedback: " + reward + afterMessage);
+            if (Constants.DebuggingMode == DebugMode.PointsRewarded)
+            {
+                if (reward > 0)
+                    mls.LogWarning("Positive Feedback: " + reward + afterMessage);
+                else if (reward < 0)
+                    mls.LogInfo("Negative Feedback: " + reward + afterMessage);
+            }
 
             nextReward = 0;
             return reward;
