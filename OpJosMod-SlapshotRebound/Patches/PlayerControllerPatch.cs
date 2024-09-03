@@ -23,16 +23,16 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 {
     public static class Constants
     {
-        public const int ExpectedFeatures = 50; //needs to match the size of what we store
+        public const int ExpectedFeatures = 3; //needs to match the size of what we store
         public const bool isTraining = true; //if set to false only update model when game is over
-        public const int DataSetSize = 10000; //(5000000)
+        public const int DataSetSize = 50000; //(5000000)
         public const int CutDataAmount = 2; //10 -> cuts data by 10 after updating model, divides by 10
         public const int MovementHeldTime = 2000; //how long holds down movement buttons in ms
-        public const int NumberOfLeaves = 256; //1024
-        public const int MinimumExampleCountPerLeaf = 5; //10
+        public const int NumberOfLeaves = 1024; //1024
+        public const int MinimumExampleCountPerLeaf = 2; //10
         public const int NumberOfTrees = 500; //1500
         public const double LearningRate = 0.02;
-        public const DebugMode DebuggingMode = DebugMode.PointsRewarded;
+        public const DebugMode DebuggingMode = DebugMode.MovmentsTaken;
     }
 
     public enum DebugMode
@@ -91,6 +91,8 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static float minEpsilon = 0.05f; // Minimum exploration probability, with no data set to 0.1 -> 10%
 
         private static int updatedModelTimes = 0;
+
+        private static string lastAction = "do_nothing";
 
         [HarmonyPatch("Update")]
         [HarmonyPostfix]
@@ -313,70 +315,79 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
             // Convert positions to a flat array (excluding Y values)
             List<float> state = new List<float>
             {
-                puckLocation.x / 100.0f, puckLocation.z / 100.0f,
-                playerLocation.x / 100.0f, playerLocation.z / 100.0f,
-                targetGoalLocation.x / 100.0f, targetGoalLocation.z / 100.0f,
-                stickRotationEuler.y,
-                puckVelocity.x / 10.0f, puckVelocity.z / 10.0f, // Normalize velocities
-                playerVelocity.x / 10.0f, playerVelocity.z / 10.0f
+                //puckLocation.x / 100.0f, puckLocation.z / 100.0f,
+                (int)Math.Round(playerLocation.x), (int)Math.Round(playerLocation.z),
+                //targetGoalLocation.x / 100.0f, targetGoalLocation.z / 100.0f,
+                //stickRotationEuler.y,
+                //puckVelocity.x / 10.0f, puckVelocity.z / 10.0f, // Normalize velocities
+                //playerVelocity.x / 10.0f, playerVelocity.z / 10.0f
             };
-
+            float actionFeature = GetActionAsFeature(lastAction);
+            state.Add(actionFeature);
             // Add teammate positions, stick rotation and velocities (excluding Y values)
-            for (int i = 0; i < teammates.Count; i++)
-            {
-                state.Add(teammates[i].x / 100.0f);
-                state.Add(teammates[i].z / 100.0f);
-                state.Add(teammateVelocities[i].x / 10.0f);
-                state.Add(teammateVelocities[i].z / 10.0f);
-
-                Quaternion teamateStickRotation = GetStickRotation(teammatesController[i]);
-                Vector3 teamateStickRotationEuler = teamateStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
-                state.Add(teamateStickRotationEuler.y);
-            }
+            //for (int i = 0; i < teammates.Count; i++)
+            //{
+            //    state.Add(teammates[i].x / 100.0f);
+            //    state.Add(teammates[i].z / 100.0f);
+            //    //state.Add(teammateVelocities[i].x / 10.0f);
+            //    //state.Add(teammateVelocities[i].z / 10.0f);
+            //
+            //    Quaternion teamateStickRotation = GetStickRotation(teammatesController[i]);
+            //    Vector3 teamateStickRotationEuler = teamateStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
+            //    state.Add(teamateStickRotationEuler.y);
+            //}
 
             // Add opponent positions, stick rotation and velocities (excluding Y values)
-            for (int i = 0; i < opponents.Count; i++)
-            {
-                state.Add(opponents[i].x / 100.0f);
-                state.Add(opponents[i].z / 100.0f);
-                state.Add(opponentVelocities[i].x / 10.0f);
-                state.Add(opponentVelocities[i].z / 10.0f);
-
-                Quaternion opponentStickRotation = GetStickRotation(opponentsController[i]);
-                Vector3 opponentStickRotationEuler = opponentStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
-                state.Add(opponentStickRotationEuler.y);
-            }
+            //for (int i = 0; i < opponents.Count; i++)
+            //{
+            //    state.Add(opponents[i].x / 100.0f);
+            //    state.Add(opponents[i].z / 100.0f);
+            //    //state.Add(opponentVelocities[i].x / 10.0f);
+            //    //state.Add(opponentVelocities[i].z / 10.0f);
+            //
+            //    Quaternion opponentStickRotation = GetStickRotation(opponentsController[i]);
+            //    Vector3 opponentStickRotationEuler = opponentStickRotation.eulerAngles / 360.0f; // Normalize to [0, 1]
+            //    state.Add(opponentStickRotationEuler.y);
+            //}
 
             //Add what buttons are currently held down
-            state.Add(IsButtonHeld(forwardKey) ? 1.0f : 0.0f);
-            state.Add(IsButtonHeld(backwardKey) ? 1.0f : 0.0f);
-            state.Add(IsButtonHeld(leftKey) ? 1.0f : 0.0f);
-            state.Add(IsButtonHeld(rightKey) ? 1.0f : 0.0f);
-            state.Add(IsButtonHeld(breakKey) ? 1.0f : 0.0f);
-            state.Add(IsLeftMouseButtonHeld() ? 1.0f : 0.0f);
+            //state.Add(IsButtonHeld(forwardKey) ? 1.0f : 0.0f);
+            //state.Add(IsButtonHeld(backwardKey) ? 1.0f : 0.0f);
+            //state.Add(IsButtonHeld(leftKey) ? 1.0f : 0.0f);
+            //state.Add(IsButtonHeld(rightKey) ? 1.0f : 0.0f);
+            //state.Add(IsButtonHeld(breakKey) ? 1.0f : 0.0f);
+            //state.Add(IsLeftMouseButtonHeld() ? 1.0f : 0.0f);
 
             // Additional state information
-            float distanceFromPuck = GetDistanceFromPuck() / 100.0f; // Assuming max distance can be 100 units
+            //float distanceFromPuck = GetDistanceFromPuck() / 100.0f; // Assuming max distance can be 100 units
 
             // Check if there is a clear path to the target goal
-            bool pathToTargetGoal = IsPathClear(playerLocation, targetGoalLocation, players);
-            bool pathToDefendingGoal = IsPathClear(playerLocation, defendingGoalLocation, players);
+            //bool pathToTargetGoal = IsPathClear(playerLocation, targetGoalLocation, players);
+            //bool pathToDefendingGoal = IsPathClear(playerLocation, defendingGoalLocation, players);
 
             // Add these fields to the state
-            float pathToTargetGoalField = pathToTargetGoal ? 1.0f : 0.0f;
-            float pathToDefendingGoalField = pathToDefendingGoal ? 1.0f : 0.0f;
-            state.Add(pathToTargetGoalField);
-            state.Add(pathToDefendingGoalField);
+            //float pathToTargetGoalField = pathToTargetGoal ? 1.0f : 0.0f;
+            //float pathToDefendingGoalField = pathToDefendingGoal ? 1.0f : 0.0f;
+            //state.Add(pathToTargetGoalField);
+            //state.Add(pathToDefendingGoalField);
 
             // Add timestamp or frame count
-            state.Add(Time.time / 1000.0f); // Normalized time
+            //state.Add(Time.time / 1000.0f); // Normalized time
 
             return state.ToArray();
+        }
+
+        private static float GetActionAsFeature(string action)
+        {
+            // Convert action to a numeric feature; simple example using a hash
+            // You can use more sophisticated encoding, such as one-hot encoding
+            return action.GetHashCode() % 10; // Example: Modulo to limit range, or use an index-based system
         }
 
         private static void PerformAction(string action)
         {
             //mls.LogMessage("performing action: " + action);
+            lastAction = action;
             switch (action)
             {
                 case "do_nothing":
@@ -447,107 +458,21 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         {
             float reward = 0f;
 
-            //when puck or player behind net
-            //if (Math.Abs(GetPuckLocation().z) > 57 || Math.Abs(GetPlayerLocation().z) > 57)
-            //    return 0f;
+            Vector3 targetGoalLocation = GetTargetGoalLocation();
+            float distanceToTargetGoal = Vector3.Distance(GetPlayerLocation(), targetGoalLocation);
+            float previousDistanceToTargetGoal = Vector3.Distance(previousPlayerPostion, targetGoalLocation);
 
-            //if hit puck away
-            if (GlobalVars.puckLastHitBy == localPlayer.player.Username)
+            // Reward if moving closer to the target goal
+            if (previousDistanceToTargetGoal > distanceToTargetGoal)
             {
-                //now closer to target
-                if (Vector3.Distance(GetTargetGoalLocation(), previousPuckPosition) > Vector3.Distance(GetTargetGoalLocation(), GetPuckLocation()))
-                {
-                    float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation());
-                    float targetGoalReward = 250 / distanceToTargetGoal;
-                    reward += targetGoalReward;
-
-                    reward += 20 / (GetPuckLocation().x + 1);
-                }
-
-                //now closer to own goal
-                if (Vector3.Distance(GetDefendingGoalLocation(), previousPuckPosition) > Vector3.Distance(GetDefendingGoalLocation(), GetPuckLocation()))
-                {
-                    float distanceToTargetGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-                    float penalty = 250 / distanceToTargetGoal;
-                    reward -= penalty;
-
-                    reward -= 20 / (GetPuckLocation().x + 1);
-                }
+                reward += 1.0f;  // Positive reward for moving closer
             }
-
-            if (TeamateHasPuck())
+            else if (previousDistanceToTargetGoal < distanceToTargetGoal)
             {
-                if (Vector3.Distance(GetPlayerLocation(), GetTargetGoalLocation()) < Vector3.Distance(GetPuckLocation(), GetTargetGoalLocation())) //player closer to goal than the puck is
-                {
-                    Vector3 directionToGoal = GetTargetGoalLocation() - GetPlayerLocation();
-                    Vector3 directionToPuck = GetPuckLocation() - GetPlayerLocation();
-
-                    float angle = Vector3.Angle(directionToGoal, directionToPuck);
-                    if (angle > 15.0f) // Not in direct line (angle greater than 30 degrees)
-                    {
-                        //reward based on closeness to cetner of field
-                        float proximityToCenter = 1 / (Mathf.Abs(GetPlayerLocation().x) + 1);
-                        float baseReward = 15.0f * proximityToCenter;
-                        reward += baseReward;
-
-                        //give more reward if far from other players
-                        List<Vector3> allPlayers = GetAllPlayersLocation();
-                        float minPlayerDistance = Mathf.Infinity;
-
-                        foreach (var player in allPlayers)
-                        {
-                            float distance = Vector3.Distance(GetPlayerLocation(), player);
-                            if (distance < minPlayerDistance)
-                                minPlayerDistance = distance;
-                        }
-
-                        if (minPlayerDistance > 3f) //if also not near other players add reward again
-                        {
-                            reward += baseReward;
-                        }
-                    }
-                }
-            }
-            else if (OpponentHasPuck())
-            {
-                float playerDistanceToGoal = Vector3.Distance(GetPlayerLocation(), GetDefendingGoalLocation());
-                float puckDistanceToGoal = Vector3.Distance(GetPuckLocation(), GetDefendingGoalLocation());
-
-                if (playerDistanceToGoal < puckDistanceToGoal)
-                {
-                    Vector3 directionPuckToGoal = (GetDefendingGoalLocation() - GetPuckLocation()).normalized;
-                    Vector3 directionPlayerToGoal = (GetDefendingGoalLocation() - GetPlayerLocation()).normalized;
-                    Vector3 directionPlayerToPuck = (GetDefendingGoalLocation() - GetPlayerLocation()).normalized;
-
-                    // Project the player's position onto the line from puck to goal
-                    Vector3 projectedPlayerPosition = Vector3.Project(GetPlayerLocation() - GetPuckLocation(), directionPuckToGoal) + GetPuckLocation();
-                    float distanceToLine = Vector3.Distance(GetPlayerLocation(), projectedPlayerPosition);
-
-                    // Define a distance threshold to consider the player as being in the way
-                    float distanceThreshold = 1.5f;
-
-                    // Check if the player is in the way of the shot
-                    if (distanceToLine < distanceThreshold)
-                    {
-                        //mls.LogMessage("Player is in the way of the shot");
-                        reward += 15;
-                    }
-                }
-            }
-
-            //reward for moving closer to puck
-            if (GetDistanceFromPuck() - Vector3.Distance(previousPlayerPostion, GetPuckLocation()) > 0 && GetDistanceFromPuck() < 200)
-            {
-                float distance = 1f / Math.Max(1, GetDistanceFromPuck()/1.5f);
-                reward += Math.Min(10, 100 * distance);
+                reward -= 1.0f;  // Negative reward for moving further away
             }
 
             reward += nextReward;
-
-            // Encourage exploration with a small random factor
-            //if (reward > 0.04 || reward < -0.04)
-            //    reward += UnityEngine.Random.Range(-0.05f, 0.05f);
-
             PropagateRewards(reward);
 
             var afterMessage = $"| {Constants.DataSetSize - trainingData.Count} reamaing till update model. | Updated Model {updatedModelTimes} times";
@@ -609,15 +534,15 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
                 var dataView = mlContext.Data.LoadFromEnumerable(flattenedData);
                 var pipeline = mlContext.Transforms.CopyColumns(outputColumnName: "Label", inputColumnName: nameof(AIInput.Reward))
-                .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
-                .Append(mlContext.Transforms.NormalizeMinMax("Features"))
-                .Append(mlContext.Regression.Trainers.LightGbm(new LightGbmRegressionTrainer.Options
-                {
-                    NumberOfLeaves = Constants.NumberOfLeaves,
-                    MinimumExampleCountPerLeaf = Constants.MinimumExampleCountPerLeaf,
-                    NumberOfIterations = Constants.NumberOfTrees,
-                    LearningRate = Constants.LearningRate
-                }));
+                    .Append(mlContext.Transforms.Concatenate("Features", nameof(AIInput.Features)))
+                    .Append(mlContext.Transforms.NormalizeMinMax("Features"))
+                    .Append(mlContext.Regression.Trainers.LightGbm(new LightGbmRegressionTrainer.Options
+                    {
+                        NumberOfLeaves = Constants.NumberOfLeaves,
+                        MinimumExampleCountPerLeaf = Constants.MinimumExampleCountPerLeaf,
+                        NumberOfIterations = Constants.NumberOfTrees,
+                        LearningRate = Constants.LearningRate
+                    }));
 
                 trainedModel = pipeline.Fit(dataView);
                 predictionEngine = mlContext.Model.CreatePredictionEngine<AIInput, AIOutput>(trainedModel);
@@ -627,6 +552,9 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 mlContext.Model.Save(trainedModel, dataView.Schema, modelPath);
                 mls.LogWarning("Model saved successfully.");
                 updatedModelTimes++;
+
+                // Evaluate the model on some test data
+                EvaluateModel();
             }
             catch (Exception ex)
             {
@@ -654,13 +582,14 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                     {
                         foreach (var item in sequence.Inputs)
                         {
-                            //mls.LogInfo("" + $"Writing data: {string.Join(",", item.Features)},{item.Reward}");
                             writer.WriteLine($"{string.Join(",", item.Features)},{item.Reward}");
                         }
                     }
                 }
 
-                //mls.LogInfo("Training data saved successfully.");
+                // Log a message after saving data
+                mls.LogInfo("Training data saved successfully.");
+                EvaluateModel(); // Evaluate after saving
             }
             catch (IOException ex)
             {
@@ -733,6 +662,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
 
         private static float[] NormalizeFeatures(float[] features)
         {
+            return features;
             float min = features.Min();
             float max = features.Max();
             if (min == max)
@@ -740,6 +670,19 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 return features.Select(f => 0f).ToArray();
             }
             return features.Select(f => (f - min) / (max - min)).ToArray();
+        }
+
+        private static void EvaluateModel()
+        {
+            var sampleData = trainingData.Take(10); // Take a sample of the training data
+            foreach (var sequence in sampleData)
+            {
+                foreach (var input in sequence.Inputs)
+                {
+                    var prediction = predictionEngine.Predict(input);
+                    mls.LogInfo("Predicted Action: " + prediction.Action + " for Input: " + string.Join(",", input.Features));
+                }
+            }
         }
 
         #region get information
@@ -1139,7 +1082,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (goalScored.ScorerID == PlayerControllerPatch.localPlayer?.player?.Id)
                 {
                     mls.LogMessage("You scored!");
-                    PlayerControllerPatch.nextReward += 2000f;
+                    PlayerControllerPatch.nextReward += 200f;
                 }
             }
             else
@@ -1149,7 +1092,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
                 if (GlobalVars.puckLastHitBy == PlayerControllerPatch.localPlayer?.player.Username)
                 {
                     mls.LogMessage("You own goaled :(");
-                    PlayerControllerPatch.nextReward -= 2000f;
+                    PlayerControllerPatch.nextReward -= 200f;
                 }
             }
         }
@@ -1159,7 +1102,7 @@ namespace OpJosModSlapshotRebound.AIPlayer.Patches
         private static void UpdatePatch(Game __instance)
         {
             if (Constants.isTraining)
-                __instance.MatchTimer = Time.time / 60;
+                __instance.MatchTimer = (Time.time / 60) + 1;
         }
     }
 
